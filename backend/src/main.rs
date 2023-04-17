@@ -1,6 +1,7 @@
 use std::{net::SocketAddr, sync::Arc, collections::HashMap, time::Duration};
 
-use axum::{Router, extract::{WebSocketUpgrade, ConnectInfo, ws::{WebSocket, Message}, State, RawBody}, response::{IntoResponse, Response}, routing::{get, post, put}, http::StatusCode, body::Full};
+use axum::{Router, extract::{WebSocketUpgrade, ConnectInfo, ws::{WebSocket, Message}, State, RawBody}, response::{IntoResponse, Response}, routing::{get, post, put}, http::StatusCode, body::Full, Json};
+use serde::Serialize;
 use thiserror::Error;
 use tokio::{sync::{Mutex, oneshot, mpsc}, time::timeout};
 use tower_http::trace::{TraceLayer, DefaultMakeSpan};
@@ -77,6 +78,7 @@ async fn main() {
     let app = Router::new()
         .route("/turtle/", get(ws_handler))
         .route("/turtle/command/", put(command_turtle))
+        .route("/turtle/list/", get(list_turtles))
         // logging so we can see whats going on
         .layer(
             TraceLayer::new_for_http()
@@ -121,6 +123,15 @@ async fn command_turtle(
     return Err((StatusCode::NOT_FOUND, StatusCode::NOT_FOUND.to_string()));
 }
 
+async fn list_turtles(
+    State(turtles): State<TurtlesState>
+) -> Json<Vec<String>>{
+    let turtles = turtles.turtles.lock().await;
+    return Json(turtles.iter()
+        .map(|(uuid, _)| uuid.to_string())
+        .collect());
+}
+
 async fn handle_socket(mut socket: WebSocket, addr: SocketAddr, turtles: TurtlesState)  {
 
     let (tx, mut rx) = mpsc::channel::<TurtleAsyncRequest>(64);
@@ -148,20 +159,35 @@ async fn handle_socket(mut socket: WebSocket, addr: SocketAddr, turtles: Turtles
                             Ok(msg) => {
                                 match msg {
                                     Message::Text(msg) => break 'response Ok(msg),
-                                    Message::Close(_) => break 'response Err(TurtleRequestError::WsClosed),
+                                    Message::Close(_) => {
+                                         if let Err(_) = request.response.send(Err(TurtleRequestError::WsClosed)) {
+                                            error!("Cannot send turtle request response!");
+                                        };
+                                        break 'main_loop
+                                    },
                                     _ => break 'response Err(TurtleRequestError::InvalidResponse)
                                 }
                             },
-                            Err(_) => break 'response Err(TurtleRequestError::RecvMsgError),
+                            Err(_) => {
+                                if let Err(_) = request.response.send(Err(TurtleRequestError::WsClosed)) {
+                                    error!("Cannot send turtle request response!");
+                                };
+                                break 'main_loop
+                            },
                         }
                     },
-                    None => break 'main_loop,
+                    None => {
+                        if let Err(_) = request.response.send(Err(TurtleRequestError::WsClosed)) {
+                            error!("Cannot send turtle request response!");
+                        };
+                        break 'main_loop; 
+                    },
                 }
             };
 
             if let Err(_) = request.response.send(response) {
                 error!("Cannot send turtle request response!");
-                break;
+                break 'main_loop;
             };
         }
     }
