@@ -1,8 +1,8 @@
 local function unsafe_exec(func)
   local ok_e, err_e = func()
   if ok_e then
-    return tostring(ok)
-  else
+    return tostring(ok_e)
+  else  
     return tostring(err_e)
   end
 end  
@@ -20,4 +20,4 @@ else if ws then
     ws.send(result)
   end
 end
-end
+end 
