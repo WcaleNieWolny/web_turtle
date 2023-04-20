@@ -1,8 +1,8 @@
 mod turtle;
 
-use std::{net::SocketAddr, sync::Arc, collections::HashMap};
+use std::{net::SocketAddr, sync::Arc, collections::HashMap, time::Duration};
 use axum::{Router, extract::{WebSocketUpgrade, ConnectInfo, ws::{WebSocket, Message}, State, Path}, response::IntoResponse, routing::{get, put}, http::StatusCode, Json};
-use tokio::sync::{Mutex, mpsc};
+use tokio::{sync::{Mutex, mpsc}, time::timeout};
 use tower_http::trace::{TraceLayer, DefaultMakeSpan};
 use tracing::error;
 use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt};
@@ -104,7 +104,21 @@ async fn handle_socket(mut socket: WebSocket, _addr: SocketAddr, turtles: Turtle
                     break 'response Err(TurtleRequestError::DataSendError(err))
                 };
 
-                match socket.recv().await {
+
+                let socket_msg = match timeout(Duration::from_secs(5), socket.recv()).await {
+                    Ok(val) => val,
+                    Err(_) => {
+                        if let Err(_) = request.response.send(Err(TurtleRequestError::TimeOut)) {
+                            error!("Cannot send turtle request response!");
+                        };
+                        
+                        //We do not care if the socket close goes well!
+                        let _ = socket.close().await;
+                        break 'main_loop;
+                    }
+                };
+
+                match socket_msg {
                     Some(msg) => {
                         match msg {
                             Ok(msg) => {

@@ -3,6 +3,9 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::{sync::{oneshot, mpsc}, time::timeout};
 
+//Lua inspect logic
+//local has_block, data = turtle.inspectDown() return textutils.serialise(data)
+
 #[derive(Error, Debug)]
 pub enum TurtleRequestError {
     #[error("Invalid WebSocket client response")] 
@@ -38,7 +41,7 @@ impl Turtle {
             response: tx,
         };
 
-        match timeout(Duration::from_secs(5), self.request_queue.send(request)).await {
+        match timeout(Duration::from_secs(3), self.request_queue.send(request)).await {
             Ok(val) => val.or(Err(TurtleRequestError::RequestSendError))?,
             Err(_) => return Err(TurtleRequestError::TimeOut),
         }
