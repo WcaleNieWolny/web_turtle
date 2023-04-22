@@ -4,7 +4,6 @@
   import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
   import { onMount } from 'svelte';
 
-  let div: HTMLDivElement
   let canvas: HTMLCanvasElement
 
   const turtleModelUrl = new URL('./assets/turtle_model.glb', import.meta.url).href
@@ -12,20 +11,16 @@
 
   let camera: THREE.PerspectiveCamera = null
   let renderer: THREE.WebGLRenderer = null;
-  
-  onMount(() => {
+ 
+   onMount(() => {
     scene.background = new THREE.Color(0x5b7cb6)
 
     renderer = new THREE.WebGLRenderer({
       canvas: canvas
     })
-    canvas.width = div.clientWidth;
-    canvas.height = div.clientHeight;
-    renderer.setSize(canvas.width, canvas.height)
+    renderer.setSize(canvas.clientWidth, canvas.clientHeight)
 
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000 );
-    camera.aspect = div.clientWidth / div.clientHeight;
-    camera.updateProjectionMatrix()
+    camera = new THREE.PerspectiveCamera(75, canvas.width / canvas.height, 0.1, 1000 );
 
     renderer.outputEncoding = THREE.sRGBEncoding;
 
@@ -82,10 +77,8 @@
     });
 
     function onWindowsResize() {
-      if (camera != null && renderer != null && canvas != null && div != null) {
-        canvas.width = div.clientWidth;
-        canvas.height = div.clientHeight;
-        renderer.setSize(canvas.width, canvas.height)
+      if (camera != null && renderer != null && canvas != null) {
+        renderer.setSize(canvas.clientWidth, canvas.clientHeight, false)
         camera.updateProjectionMatrix()
       }
     };
@@ -93,18 +86,12 @@
 </script>
 
 
-<div bind:this={div}>
-  <canvas bind:this={canvas}></canvas>
-</div>
+<canvas bind:this={canvas}></canvas>
 <svelte:window on:resize={onWindowsResize}/>
 
 <style>
-  div {
-    flex: 1;
-    align-self: stretch;
-    display: grid;
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr;
-    gap: 0px 0px
+  canvas {
+    display: flex;
+    flex: 1
   }
 </style>
