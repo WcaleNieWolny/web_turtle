@@ -5,6 +5,7 @@
   import { onMount } from 'svelte';
 
   let canvas: HTMLCanvasElement
+  export let upperDiv: HTMLDivElement
 
   const turtleModelUrl = new URL('./assets/turtle_model.glb', import.meta.url).href
   const scene = new THREE.Scene()
@@ -77,8 +78,13 @@
     });
 
     function onWindowsResize() {
-      if (camera != null && renderer != null && canvas != null) {
-        renderer.setSize(canvas.clientWidth, canvas.clientHeight, false)
+      console.log(upperDiv)
+      if (camera != null && renderer != null && canvas != null && upperDiv != null) {
+        let width = window.innerWidth;
+        let height = window.innerHeight - upperDiv.clientHeight
+        renderer.setSize(width, height)
+
+        camera.aspect = width / height
         camera.updateProjectionMatrix()
       }
     };

@@ -1,15 +1,17 @@
 <script lang="ts">
   import Renderer from "./Renderer.svelte"
+
+  let navbarDiv: HTMLDivElement;
 </script>
 
 <main>
   <div class="main">
-    <div class="test">
+    <div bind:this={navbarDiv} class="test">
       <p>
         Hello
       </p>
     </div>
-    <Renderer/>
+    <Renderer upperDiv={navbarDiv}/>
   </div>
 </main>
 
