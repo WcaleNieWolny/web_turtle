@@ -88,7 +88,6 @@
         camera.updateProjectionMatrix()
       }
     };
-
 </script>
 
 

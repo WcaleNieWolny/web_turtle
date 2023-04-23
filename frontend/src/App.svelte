@@ -1,15 +1,14 @@
 <script lang="ts">
   import Renderer from "./Renderer.svelte"
+    import TurtleList from "./TurtleList.svelte";
 
   let navbarDiv: HTMLDivElement;
 </script>
 
 <main>
   <div class="main">
-    <div bind:this={navbarDiv} class="test">
-      <p>
-        Hello
-      </p>
+    <div bind:this={navbarDiv}>
+      <TurtleList/>
     </div>
     <Renderer upperDiv={navbarDiv}/>
   </div>
@@ -23,9 +22,5 @@
     min-height: 100vh;
     margin: 0;
     width: 100%;
-  }
-
-  .test {
-    flex-shrink: 0;
   }
 </style>
