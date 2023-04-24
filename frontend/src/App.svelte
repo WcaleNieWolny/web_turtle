@@ -1,11 +1,13 @@
 <script lang="ts">
   import Renderer from "./Renderer.svelte"
-    import TurtleList from "./TurtleList.svelte";
+  import TurtleList from "./TurtleList.svelte";
+  import TailwindCss from './TailwindCSS.svelte';
 
   let navbarDiv: HTMLDivElement;
 </script>
 
 <main>
+  <TailwindCss/>
   <div class="main">
     <div bind:this={navbarDiv}>
       <TurtleList/>

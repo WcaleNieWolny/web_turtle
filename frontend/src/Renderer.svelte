@@ -78,7 +78,6 @@
     });
 
     function onWindowsResize() {
-      console.log(upperDiv)
       if (camera != null && renderer != null && canvas != null && upperDiv != null) {
         let width = window.innerWidth;
         let height = window.innerHeight - upperDiv.clientHeight
