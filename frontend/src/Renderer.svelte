@@ -3,9 +3,15 @@
   import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
   import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
   import { onMount } from 'svelte';
+  import { turtleStore, type Turtle, MoveDirection, moveTurtle} from './lib/turtle';
 
   let canvas: HTMLCanvasElement
   export let upperDiv: HTMLDivElement
+
+  let globalTurtle: Turtle = null;
+  turtleStore.subscribe(val => {
+      globalTurtle = val;
+  })
 
   const turtleModelUrl = new URL('./assets/turtle_model.glb', import.meta.url).href
   const scene = new THREE.Scene()
@@ -87,11 +93,45 @@
         camera.updateProjectionMatrix()
       }
     };
+
+    let latestKeyPress = Date.now()
+
+    async function onKeybordEvent(event: KeyboardEvent) {
+      if (globalTurtle === null) {
+        return
+      }
+
+      if (Date.now() - latestKeyPress < 500) {
+        return
+      }
+
+      latestKeyPress = Date.now()
+
+      switch (event.key) {
+        case "w": {
+          await moveTurtle(globalTurtle, MoveDirection.Forward)
+          break;
+        }
+        case "s": {
+          await moveTurtle(globalTurtle, MoveDirection.Backward)
+          break;
+        }
+        case "a": {
+          await moveTurtle(globalTurtle, MoveDirection.Left)
+          console.log("left")
+          break
+        }
+        case "d": {
+          await moveTurtle(globalTurtle, MoveDirection.Right)
+          break
+        }
+      }
+    }
 </script>
 
 
 <canvas bind:this={canvas}></canvas>
-<svelte:window on:resize={onWindowsResize}/>
+<svelte:window on:resize={onWindowsResize} on:keydown={onKeybordEvent}/>
 
 <style>
   canvas {

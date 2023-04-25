@@ -3,10 +3,10 @@ mod turtle;
 use std::{net::SocketAddr, sync::Arc, collections::HashMap, time::Duration};
 use axum::{Router, extract::{WebSocketUpgrade, ConnectInfo, ws::{WebSocket, Message}, State, Path}, response::IntoResponse, routing::{get, put}, http::StatusCode, Json};
 use tokio::{sync::{Mutex, mpsc}, time::timeout};
-use tower_http::trace::{TraceLayer, DefaultMakeSpan};
+use tower_http::{trace::{TraceLayer, DefaultMakeSpan}, cors::{CorsLayer, Any}};
 use tracing::error;
 use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt};
-use turtle::{Turtle, TurtleRequestError, TurtleAsyncRequest};
+use turtle::{Turtle, TurtleRequestError, TurtleAsyncRequest, MoveDirection};
 use uuid::Uuid;
 
 #[derive(Clone, Default)]
@@ -19,7 +19,7 @@ async fn main() {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "turtle_weboscket=debug,tower_http=debug".into()),
+                .unwrap_or_else(|_| "backend=debug,tower_http=debug".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
@@ -29,11 +29,17 @@ async fn main() {
     let app = Router::new()
         .route("/turtle/", get(ws_handler))
         .route("/turtle/:id/command/", put(command_turtle))
+        .route("/turtle/:id/move/", put(move_turtle))
         .route("/turtle/list/", get(list_turtles))
         // logging so we can see whats going on
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::default().include_headers(true)),
+        )
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any),
         )
         .with_state(TurtlesState::default());
 
@@ -62,7 +68,6 @@ async fn command_turtle(
     Path(uuid): Path<String>,
     command: String 
 ) -> Result<impl IntoResponse, (StatusCode, impl IntoResponse)> {
-
     let mut guard = turtles.turtles.lock().await;
 
     let uuid = Uuid::parse_str(&uuid).or(Err((StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST.to_string())))?;
@@ -72,6 +77,30 @@ async fn command_turtle(
     };
 
     return turtle.command(&command).await.map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
+}
+
+async fn move_turtle(
+    State(turtles): State<TurtlesState>,
+    Path(uuid): Path<String>,
+    command: String 
+) -> Result<impl IntoResponse, (StatusCode, impl IntoResponse)> {
+    let mut guard = turtles.turtles.lock().await;
+
+    let uuid = Uuid::parse_str(&uuid).or(Err((StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST.to_string())))?;
+    let turtle = match guard.get_mut(&uuid) {
+        Some(v) => v,
+        None => return Err((StatusCode::NOT_FOUND, StatusCode::NOT_FOUND.to_string())) 
+    };
+
+    let direction = match command.as_str() {
+        "forward" => MoveDirection::FORWARD,
+        "backward" => MoveDirection::BAKCWARD,
+        "left" => MoveDirection::LEFT,
+        "right" => MoveDirection::RIGHT,
+        _ => return Err((StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST.to_string())),
+    };
+
+    return turtle.move_turtle(direction).await.map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
 }
 
 async fn list_turtles(
