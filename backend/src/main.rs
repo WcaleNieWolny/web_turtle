@@ -1,21 +1,25 @@
 mod turtle;
+mod database;
+mod schema;
 
-use std::{net::SocketAddr, sync::Arc, collections::HashMap, time::Duration};
+use std::{net::SocketAddr, sync::Arc, collections::HashMap, time::Duration, error::Error};
 use axum::{Router, extract::{WebSocketUpgrade, ConnectInfo, ws::{WebSocket, Message}, State, Path}, response::IntoResponse, routing::{get, put}, http::StatusCode, Json};
+use database::{SqlitePool, TurtleData, Connection, DatabaseActionError};
 use tokio::{sync::{Mutex, mpsc}, time::timeout};
 use tower_http::{trace::{TraceLayer, DefaultMakeSpan}, cors::{CorsLayer, Any}};
-use tracing::error;
+use tracing::{error, warn};
 use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt};
 use turtle::{Turtle, TurtleRequestError, TurtleAsyncRequest, MoveDirection};
 use uuid::Uuid;
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 struct TurtlesState {
     turtles: Arc<Mutex<HashMap<Uuid, Turtle>>>,
+    pool: Arc<SqlitePool>
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn Error>> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -24,6 +28,11 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    let pool = database::init()?; 
+    let state = TurtlesState {
+        turtles: Default::default(),
+        pool: Arc::new(pool) 
+    };
 
     // build our application with some routes
     let app = Router::new()
@@ -41,7 +50,7 @@ async fn main() {
                 .allow_origin(Any)
                 .allow_methods(Any),
         )
-        .with_state(TurtlesState::default());
+        .with_state(state);
 
     // run it with hyper
     //
@@ -49,8 +58,9 @@ async fn main() {
     tracing::debug!("listening on {}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service_with_connect_info::<SocketAddr>())
-        .await
-        .unwrap();
+        .await?;
+
+    return Ok(());
 }
 
 async fn ws_handler(
@@ -119,6 +129,22 @@ async fn handle_socket(mut socket: WebSocket, _addr: SocketAddr, turtles: Turtle
     let turtle = Turtle {
         request_queue: tx,
     };
+
+    //Attempt to get turtle by uuid
+    let conn: Result<Connection, DatabaseActionError> = turtles.pool.clone().try_into();
+    let mut conn = match conn {
+        Ok(val) => val,
+        Err(err) => {
+            warn!("Socket poll empty ({})", err.to_string());
+            if let Err(close_err) = socket.close().await {
+                error!("Cannot close WebSocket {close_err}") 
+            };
+            return;
+        }
+    };
+
+    let turtle_data = TurtleData::read_by_uuid(&mut conn, &uuid);
+    println!("Some: {}", turtle_data.is_ok());
 
     //Add new turtle
     let mut guard = turtles.turtles.lock().await;
