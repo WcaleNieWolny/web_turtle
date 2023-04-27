@@ -29,6 +29,7 @@ pub enum DatabaseActionError {
 
 #[derive(Queryable, Insertable)]
 #[diesel(table_name = turtles)]
+#[derive(Debug)]
 pub struct TurtleData {
     pub id: Option<i32>,
     pub uuid: String,

@@ -2,15 +2,17 @@ mod turtle;
 mod database;
 mod schema;
 
-use std::{net::SocketAddr, sync::Arc, collections::HashMap, time::Duration, error::Error};
+use std::{net::SocketAddr, sync::Arc, collections::HashMap, time::Duration, error::Error, str::FromStr};
 use axum::{Router, extract::{WebSocketUpgrade, ConnectInfo, ws::{WebSocket, Message}, State, Path}, response::IntoResponse, routing::{get, put}, http::StatusCode, Json};
 use database::{SqlitePool, TurtleData, Connection, DatabaseActionError};
 use tokio::{sync::{Mutex, mpsc}, time::timeout};
 use tower_http::{trace::{TraceLayer, DefaultMakeSpan}, cors::{CorsLayer, Any}};
-use tracing::{error, warn};
+use tracing::{error, warn, debug};
 use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt};
 use turtle::{Turtle, TurtleRequestError, TurtleAsyncRequest, MoveDirection};
 use uuid::Uuid;
+
+static GET_OS_LABEL_PAYLOAD: &str = "local ok, err = os.computerLabel() return ok";
 
 #[derive(Clone)]
 struct TurtlesState {
@@ -123,12 +125,61 @@ async fn list_turtles(
 }
 
 async fn handle_socket(mut socket: WebSocket, _addr: SocketAddr, turtles: TurtlesState)  {
+    macro_rules! close_socket {
+        () => {
+             if let Err(close_err) = socket.close().await {
+                error!("Cannot close WebSocket {close_err}") 
+            };
+        };
+    }
+    macro_rules! send_payload {
+        ($payload:expr) => {
+            'main: {
+                //For some reason the user disconected
+                if let Err(_) = socket.send(Message::Text($payload.to_string())).await {
+                    close_socket!();
+                    return; 
+                }
+
+                let socket_msg = match timeout(Duration::from_secs(5), socket.recv()).await {
+                    Ok(val) => {
+                        match val {
+                            Some(val) => {
+                                match val {
+                                    Ok(val) => {
+                                        match val {
+                                            Message::Text(val) => val,
+                                            _ => {
+                                                close_socket!();
+                                                return;
+                                            },
+                                        }
+                                    }
+                                    Err(err) => {
+                                        warn!("After recv something went wrong {}", err);
+                                        close_socket!();
+                                        return;
+                                    }
+                                }
+                            },
+                            None => {
+                                //Socket closed so no closing
+                                return;
+                            }
+                        }
+                    },
+                    Err(_) => {
+                        //That is a time out
+                        close_socket!();
+                        return;           
+                    }
+                };
+                break 'main socket_msg
+            }
+        };
+    }
 
     let (tx, mut rx) = mpsc::channel::<TurtleAsyncRequest>(64);
-    let uuid = Uuid::new_v4();
-    let turtle = Turtle {
-        request_queue: tx,
-    };
 
     //Attempt to get turtle by uuid
     let conn: Result<Connection, DatabaseActionError> = turtles.pool.clone().try_into();
@@ -143,8 +194,56 @@ async fn handle_socket(mut socket: WebSocket, _addr: SocketAddr, turtles: Turtle
         }
     };
 
-    let turtle_data = TurtleData::read_by_uuid(&mut conn, &uuid);
-    println!("Some: {}", turtle_data.is_ok());
+    let (turtle_data, uuid) = 'turtle_data: {
+        let socket_msg = send_payload!(GET_OS_LABEL_PAYLOAD);
+        let parsed_uuid = Uuid::try_parse(&socket_msg);
+
+        if socket_msg == "nil" || parsed_uuid.is_err() {
+            //We have a unknown turtle
+            let new_uuid = Uuid::new_v4();
+            let set_payload = format!("return os.setComputerLabel(\"{}\")", new_uuid.simple().to_string());
+            let _ = send_payload!(set_payload);
+
+            //Now we try to insert that uuid into the db
+            let turtle_data = TurtleData {
+                id: None,
+                uuid: new_uuid.to_string(),
+                x: 0,
+                y: 0,
+                z: 0,
+                rotation: 0  //Forward,
+            };
+
+           match turtle_data.put(&mut conn) {
+               Ok(val) => break 'turtle_data (val, new_uuid),
+               Err(err) => {
+                   error!("Database error {err}");
+                   close_socket!();
+                   return;
+               }
+           };
+        } else {
+            //Cannot failed, we checked for parsing error above
+            let uuid = unsafe { 
+                parsed_uuid.unwrap_unchecked()
+            };
+
+            let db_turtle_data = TurtleData::read_by_uuid(&mut conn, &uuid);
+            match db_turtle_data {
+                Ok(val) => break 'turtle_data (val, uuid),
+                Err(err) => {
+                    debug!("Database error ({err})");
+                    close_socket!();
+                    return;
+                }
+            }
+        }
+    };
+
+    let turtle = Turtle {
+        request_queue: tx,
+        turtle_data
+    };
 
     //Add new turtle
     let mut guard = turtles.turtles.lock().await;

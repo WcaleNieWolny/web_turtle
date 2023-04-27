@@ -3,6 +3,8 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::{sync::{oneshot, mpsc}, time::timeout};
 
+use crate::database::TurtleData;
+
 //Lua inspect logic
 //local has_block, data = turtle.inspectDown() return textutils.serialise(data)
 
@@ -49,7 +51,8 @@ pub enum MoveDirection {
 
 #[derive(Debug)]
 pub struct Turtle {
-    pub request_queue: mpsc::Sender<TurtleAsyncRequest>
+    pub request_queue: mpsc::Sender<TurtleAsyncRequest>,
+    pub turtle_data: TurtleData
 }
 
 impl Turtle {
