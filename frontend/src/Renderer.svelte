@@ -15,6 +15,7 @@
 
   const turtleModelUrl = new URL('./assets/turtle_model.glb', import.meta.url).href
   const scene = new THREE.Scene()
+  let turtleModel: THREE.Group = undefined;
 
   let camera: THREE.PerspectiveCamera = null
   let renderer: THREE.WebGLRenderer = null;
@@ -40,13 +41,19 @@
     cube.position.set(0, 0, 0)
     scene.add( cube );
 
+
+    const gridHelper = new THREE.GridHelper( 10, 10 );
+    scene.add( gridHelper );
+
     const loader = new GLTFLoader();
     loader.load(
       // resource URL
       turtleModelUrl.toString(),
       // called when the resource is loaded
       function ( gltf ) {
-        gltf.scene.position.set(-0.5, 0.5, -0.5)
+        gltf.scene.position.set(0.5, 0.5, -0.5)
+        turtleModel = gltf.scene
+        turtleModel.rotation.y = -1.57
         scene.add( gltf.scene );
       },
       // called while loading is progressing
@@ -71,6 +78,9 @@
     controls.maxPolarAngle = Math.PI / 2;
 
     function animate() {
+      if (turtleModel !== undefined) {
+        //turtleModel.rotation.y += 0.01;
+      }
       //cube.position.x += 0.1;
       controls.target = new THREE.Vector3(cube.position.x, cube.position.y, cube.position.y);
       controls.update()
@@ -97,7 +107,7 @@
     let latestKeyPress = Date.now()
 
     async function onKeybordEvent(event: KeyboardEvent) {
-      if (globalTurtle === null) {
+      if (globalTurtle === null || turtleModel === null) {
         return
       }
 
@@ -106,26 +116,31 @@
       }
 
       latestKeyPress = Date.now()
+      let direction: MoveDirection = undefined;
 
       switch (event.key) {
         case "w": {
-          await moveTurtle(globalTurtle, MoveDirection.Forward)
+          direction = MoveDirection.Forward;
           break;
         }
         case "s": {
-          await moveTurtle(globalTurtle, MoveDirection.Backward)
+          direction = MoveDirection.Backward;
           break;
         }
         case "a": {
-          await moveTurtle(globalTurtle, MoveDirection.Left)
-          console.log("left")
+          direction = MoveDirection.Left;
           break
         }
         case "d": {
-          await moveTurtle(globalTurtle, MoveDirection.Right)
+          direction =  MoveDirection.Right;
           break
         }
+        default: {
+          return;
+        }
       }
+
+      let result = await moveTurtle(globalTurtle, direction);
     }
 </script>
 

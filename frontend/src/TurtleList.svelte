@@ -1,8 +1,9 @@
 <script lang="ts">
     import { writable, type Writable } from 'svelte/store';
     import TurtleElement from './TurtleElement.svelte';
-    import { turtleStore, type Turtle } from "./lib/turtle"
+    import { turtleStore, type Turtle, TurtleSchema } from "./lib/turtle"
     import { onMount } from 'svelte';
+    import { z } from "zod";
 
     let turtles: Writable<Turtle[]> = writable([]) 
 
@@ -16,14 +17,17 @@
         const response = await fetch(url, {
             method: "GET"
         })
-        const remoteTurtles: string[] = await response.json();
+
+        const json = await response.json();
+        if (!Array.isArray(json)) {
+            throw Error("Invalid response from backend (not a array)")
+        };
+
+        const remoteTurtles: object[] = json; 
         const newTurtles: Turtle[] = []
 
-        remoteTurtles.forEach((uuid, i) => {
-            newTurtles.push({
-                uuid: uuid,
-                id: i
-            })
+        remoteTurtles.forEach((turtleObject, i) => {
+            newTurtles.push(TurtleSchema.parse(turtleObject))
         });
 
         //Unselect turtle

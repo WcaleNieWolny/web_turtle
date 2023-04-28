@@ -49,6 +49,29 @@ pub enum MoveDirection {
     RIGHT
 }
 
+impl ToString for MoveDirection {
+    fn to_string(&self) -> String {
+        match self {
+            MoveDirection::FORWARD => "forward".to_string(),
+            MoveDirection::BAKCWARD => "backward".to_string(),
+            MoveDirection::LEFT => "left".to_string(),
+            MoveDirection::RIGHT => "right".to_string(),
+        }
+    }
+}
+
+impl MoveDirection {
+    pub fn from_i32(number: i32) -> Self {
+        match number {
+            0 => Self::FORWARD,
+            1 => Self::BAKCWARD,
+            2 => Self::LEFT,
+            3 => Self::RIGHT,
+            _ => panic!("Invalid i32 number to MoveDirection, this should NEVER happen")
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Turtle {
     pub request_queue: mpsc::Sender<TurtleAsyncRequest>,

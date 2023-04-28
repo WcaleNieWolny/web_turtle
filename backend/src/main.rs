@@ -11,6 +11,7 @@ use tracing::{error, warn, debug};
 use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt};
 use turtle::{Turtle, TurtleRequestError, TurtleAsyncRequest, MoveDirection};
 use uuid::Uuid;
+use serde_json::{json, Value};
 
 static GET_OS_LABEL_PAYLOAD: &str = "local ok, err = os.computerLabel() return ok";
 
@@ -117,10 +118,22 @@ async fn move_turtle(
 
 async fn list_turtles(
     State(turtles): State<TurtlesState>
-) -> Json<Vec<String>>{
+) -> Json<Vec<Value>>{
     let turtles = turtles.turtles.lock().await;
-    return Json(turtles.iter()
-        .map(|(uuid, _)| uuid.to_string())
+
+    return Json(
+        turtles.iter()
+        .enumerate()
+        .map(|(id, (uuid, turtle))| {
+            json!({
+                "id": id,
+                "uuid": uuid.to_string(),
+                "x": turtle.turtle_data.x,
+                "y": turtle.turtle_data.y,
+                "z": turtle.turtle_data.z,
+                "rotation": MoveDirection::from_i32(turtle.turtle_data.rotation).to_string()
+            })
+        })
         .collect());
 }
 

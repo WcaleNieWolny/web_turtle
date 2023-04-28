@@ -4,8 +4,7 @@ export default {
   theme: {
     extend: {},
   },
-  purge: ["./index.html",'./src/**/*.{svelte,js,ts}'],
+  content: ["./index.html",'./src/**/*.{svelte,js,ts}'],
   plugins: [],
-  darkMode: false
 }
 
