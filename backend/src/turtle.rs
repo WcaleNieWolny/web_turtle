@@ -69,6 +69,43 @@ impl MoveDirection {
             Self::Left => 3,
         }
     }
+
+    /// # Returns
+    /// A tuple (x, y, z)
+    /// # Safety 
+    /// NEVER CALL THIS FUNCTION WITH MoveDirection::Left OR MoveDirection:Right
+    fn to_turtle_move_diff(&self, turtle: &Turtle) -> (i32, i32, i32) {
+        match turtle.turtle_data.rotation {
+            MoveDirection::Forward => {
+                match self {
+                    MoveDirection::Forward => (1, 0, 0),
+                    MoveDirection::Backward => (-1, 0, 0),
+                    _ => unreachable!()
+                }
+            },
+            MoveDirection::Backward => {
+                match self {
+                    MoveDirection::Forward => (-1, 0, 0),
+                    MoveDirection::Backward => (1, 0, 0),
+                    _ => unreachable!()
+                }
+            },
+            MoveDirection::Left => {
+                match self {
+                    MoveDirection::Forward => (0, 0, -1),
+                    MoveDirection::Backward => (0, 0, 1),
+                    _ => unreachable!()
+                }
+            },
+            MoveDirection::Right => {
+                match self {
+                    MoveDirection::Forward => (0, 0, 1),
+                    MoveDirection::Backward => (0, 0, -1),
+                    _ => unreachable!()
+                }
+            },
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -129,7 +166,12 @@ impl Turtle {
                         }
                         self.turtle_data.rotation = MoveDirection::from_i32(enum_number)
                     },
-                    _ => {}
+                    direction => {
+                        let (x_diff, y_diff, z_diff) = direction.to_turtle_move_diff(&self);
+                        self.turtle_data.x += x_diff;
+                        self.turtle_data.y += y_diff;
+                        self.turtle_data.z += z_diff;
+                    }
                 };
                 return Ok(()); 
             },

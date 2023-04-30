@@ -84,16 +84,15 @@
     controls.dampingFactor = 0.05;
     controls.screenSpacePanning = false;
     controls.minDistance = 8;
-    controls.maxDistance = 15;
+    controls.maxDistance = 12;
     controls.maxPolarAngle = Math.PI / 2;
 
     function animate() {
-      if (turtleModel !== undefined) {
-        //turtleModel.rotation.y += 0.01;
-      }
       //cube.position.x += 0.1;
-      controls.target = new THREE.Vector3(cube.position.x, cube.position.y, cube.position.y);
-      controls.update()
+      if (turtleModel !== undefined) {
+        controls.target = new THREE.Vector3(turtleModel.position.x, turtleModel.position.y, turtleModel.position.z);
+        controls.update()
+      }
       requestAnimationFrame( animate );
 
       //controls.update();
