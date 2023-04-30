@@ -5,11 +5,12 @@ mod schema;
 use std::{net::SocketAddr, sync::Arc, collections::HashMap, time::Duration, error::Error};
 use axum::{Router, extract::{WebSocketUpgrade, ConnectInfo, ws::{WebSocket, Message}, State, Path}, response::IntoResponse, routing::{get, put}, http::StatusCode, Json};
 use database::{SqlitePool, TurtleData, Connection, DatabaseActionError};
+use schema::MoveDirection;
 use tokio::{sync::{Mutex, mpsc}, time::timeout};
 use tower_http::{trace::{TraceLayer, DefaultMakeSpan}, cors::{CorsLayer, Any}};
 use tracing::{error, warn, debug};
 use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt};
-use turtle::{Turtle, TurtleRequestError, TurtleAsyncRequest, MoveDirection};
+use turtle::{Turtle, TurtleRequestError, TurtleAsyncRequest};
 use uuid::Uuid;
 use serde_json::{json, Value};
 
@@ -106,10 +107,10 @@ async fn move_turtle(
     };
 
     let direction = match command.as_str() {
-        "forward" => MoveDirection::FORWARD,
-        "backward" => MoveDirection::BAKCWARD,
-        "left" => MoveDirection::LEFT,
-        "right" => MoveDirection::RIGHT,
+        "forward" => MoveDirection::Forward,
+        "backward" => MoveDirection::Backward,
+        "left" => MoveDirection::Left,
+        "right" => MoveDirection::Right,
         _ => return Err((StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST.to_string())),
     };
 
@@ -138,7 +139,7 @@ async fn list_turtles(
                 "x": turtle.turtle_data.x,
                 "y": turtle.turtle_data.y,
                 "z": turtle.turtle_data.z,
-                "rotation": MoveDirection::from_i32(turtle.turtle_data.rotation).to_string()
+                "rotation": turtle.turtle_data.rotation.to_string()
             })
         })
         .collect());
@@ -231,7 +232,7 @@ async fn handle_socket(mut socket: WebSocket, _addr: SocketAddr, turtles: Turtle
                 x: 0,
                 y: 0,
                 z: 0,
-                rotation: 0  //Forward,
+                rotation: MoveDirection::Forward,
             };
 
            match turtle_data.put(&mut conn) {

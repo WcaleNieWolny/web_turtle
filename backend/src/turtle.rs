@@ -3,7 +3,7 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::{sync::{oneshot, mpsc}, time::timeout};
 
-use crate::database::TurtleData;
+use crate::{database::TurtleData, schema::MoveDirection};
 
 //Lua inspect logic
 //local has_block, data = turtle.inspectDown() return textutils.serialise(data)
@@ -32,8 +32,6 @@ pub enum TurtleMoveError {
     CannotMove,
     #[error("Invalid turtle response ({0})")]
     InvalidTurtleResponse(String),
-    #[error("Not yet implemented")]
-    NotImplemented
 }
 
 
@@ -42,20 +40,13 @@ pub struct TurtleAsyncRequest {
     pub response: oneshot::Sender<Result<String, TurtleRequestError>>
 }
 
-pub enum MoveDirection {
-    FORWARD,
-    RIGHT,
-    BAKCWARD,
-    LEFT
-}
-
 impl ToString for MoveDirection {
     fn to_string(&self) -> String {
         match self {
-            MoveDirection::FORWARD => "forward".to_string(),
-            MoveDirection::BAKCWARD => "backward".to_string(),
-            MoveDirection::LEFT => "left".to_string(),
-            MoveDirection::RIGHT => "right".to_string(),
+            MoveDirection::Forward => "forward".to_string(),
+            MoveDirection::Backward => "backward".to_string(),
+            MoveDirection::Left => "left".to_string(),
+            MoveDirection::Right => "right".to_string(),
         }
     }
 }
@@ -63,19 +54,19 @@ impl ToString for MoveDirection {
 impl MoveDirection {
     pub fn from_i32(number: i32) -> Self {
         match number {
-            0 => Self::FORWARD,
-            1 => Self::RIGHT,
-            2 => Self::BAKCWARD,
-            3 => Self::LEFT,
+            0 => Self::Forward,
+            1 => Self::Right,
+            2 => Self::Backward,
+            3 => Self::Left,
             _ => panic!("Invalid i32 number to MoveDirection, this should NEVER happen")
         }
     }
     pub fn to_i32(&self) -> i32 {
         match &self {
-            Self::FORWARD => 0,
-            Self::RIGHT => 1,
-            Self::BAKCWARD => 2,
-            Self::LEFT => 3,
+            Self::Forward => 0,
+            Self::Right => 1,
+            Self::Backward => 2,
+            Self::Left => 3,
         }
     }
 }
@@ -108,35 +99,35 @@ impl Turtle {
 
     pub async fn move_turtle(&mut self, direction: MoveDirection) -> Result<(), TurtleMoveError> {
         let command = match direction {
-            MoveDirection::FORWARD => {
+            MoveDirection::Forward => {
                 "return turtle.forward()"
             },
-            MoveDirection::BAKCWARD => "return turtle.back()",
-            MoveDirection::RIGHT => "return turtle.turnRight()",
-            MoveDirection::LEFT => "return turtle.turnLeft()"
+            MoveDirection::Backward => "return turtle.back()",
+            MoveDirection::Right => "return turtle.turnRight()",
+            MoveDirection::Left => "return turtle.turnLeft()"
         };
 
         let result = self.command(command).await?;
         match result.as_str() {
             "true" => {
                 match direction {
-                    MoveDirection::RIGHT => {
-                        let mut enum_number = self.turtle_data.rotation;
+                    MoveDirection::Right => {
+                        let mut enum_number = self.turtle_data.rotation.to_i32();
                         if enum_number == 3 {
                             enum_number = 0
                         } else {
                             enum_number += 1
                         }
-                        self.turtle_data.rotation = enum_number
+                        self.turtle_data.rotation = MoveDirection::from_i32(enum_number)
                     }
-                    MoveDirection::LEFT => {
-                        let mut enum_number = self.turtle_data.rotation;
+                    MoveDirection::Left => {
+                        let mut enum_number = self.turtle_data.rotation.to_i32();
                         if enum_number == 0 {
                             enum_number = 3
                         } else {
                             enum_number -= 1
                         }
-                        self.turtle_data.rotation = enum_number
+                        self.turtle_data.rotation = MoveDirection::from_i32(enum_number)
                     },
                     _ => {}
                 };

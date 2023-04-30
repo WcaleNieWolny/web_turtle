@@ -1,13 +1,22 @@
 // @generated automatically by Diesel CLI.
+#[derive(diesel_derive_enum::DbEnum, Debug)]
+pub enum MoveDirection {
+    Forward,
+    Right,
+    Backward,
+    Left
+}
 
 diesel::table! {
+    use super::MoveDirectionMapping;
+    use diesel::sql_types::{Integer, Nullable, Text};
     turtles (id) {
         id -> Nullable<Integer>,
         uuid -> Text,
         x -> Integer,
         y -> Integer,
         z -> Integer,
-        rotation -> Integer,
+        rotation -> MoveDirectionMapping,
     }
 }
 

@@ -77,6 +77,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "diesel",
+ "diesel-derive-enum",
  "futures",
  "serde",
  "serde_json",
@@ -162,6 +163,18 @@ dependencies = [
  "diesel_derives",
  "libsqlite3-sys",
  "r2d2",
+]
+
+[[package]]
+name = "diesel-derive-enum"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b10c03b954333d05bfd5be1d8a74eae2c9ca77b86e0f1c3a1ea29c49da1d6c2"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -310,6 +323,12 @@ dependencies = [
  "libc",
  "wasi",
 ]
+
+[[package]]
+name = "heck"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
 
 [[package]]
 name = "hermit-abi"

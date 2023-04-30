@@ -4,7 +4,7 @@ use diesel::{prelude::*, r2d2::{Pool, ConnectionManager, PooledConnection}};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::schema::{worlds_data, turtles};
+use crate::schema::{worlds_data, turtles, MoveDirection};
 
 pub type SqlitePool = Pool<ConnectionManager<SqliteConnection>>;
 
@@ -38,7 +38,7 @@ pub struct TurtleData {
     pub x: i32,
     pub y: i32,
     pub z: i32,
-    pub rotation: i32,
+    pub rotation: MoveDirection,
 }
 
 #[derive(Queryable, Insertable)]
