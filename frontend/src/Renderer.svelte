@@ -3,19 +3,25 @@
   import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
   import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
   import { onMount } from 'svelte';
-  import { turtleStore, type Turtle, MoveDirection, moveTurtle} from './lib/turtle';
+  import { turtleStore, type Turtle, MoveDirection, moveTurtle, directionToMoveDiff, directionToStartLocation, turtleRotateRight, turtleRotateLeft} from './lib/turtle';
 
   let canvas: HTMLCanvasElement
   export let upperDiv: HTMLDivElement
 
-  let globalTurtle: Turtle = null;
-  turtleStore.subscribe(val => {
-      globalTurtle = val;
-  })
-
   const turtleModelUrl = new URL('./assets/turtle_model.glb', import.meta.url).href
   const scene = new THREE.Scene()
   let turtleModel: THREE.Group = undefined;
+
+  let globalTurtle: Turtle = null;
+  turtleStore.subscribe(val => {
+      globalTurtle = val;
+      if (turtleModel !== undefined) {
+          let startLoc = directionToStartLocation(globalTurtle.rotation)
+          turtleModel.position.x = startLoc.startX + globalTurtle.x
+          turtleModel.position.z = startLoc.startZ + globalTurtle.z
+          turtleModel.rotation.y = startLoc.rotY
+      } 
+  })
 
   let camera: THREE.PerspectiveCamera = null
   let renderer: THREE.WebGLRenderer = null;
@@ -54,6 +60,10 @@
         gltf.scene.position.set(0.5, 0.5, -0.5)
         turtleModel = gltf.scene
         turtleModel.rotation.y = -1.57
+        //FORWARD = turtleModel.rotation.y = -1.57 (0.5, 0.5, -0.5)
+        //BACK = 1.57 (-0.5, 0.5, 0.5)
+        //turtleModel.rotation.y = Math.PI //Right 0.5, 0.5, 0.5 
+        //iturtleModel.rotation.y = 0 //Left 0.5, 0.5, -0.5 
         scene.add( gltf.scene );
       },
       // called while loading is progressing
@@ -141,6 +151,38 @@
       }
 
       let result = await moveTurtle(globalTurtle, direction);
+      if (!result.ok) {
+        return
+      }
+      switch (direction) {
+        case MoveDirection.Backward: 
+        case MoveDirection.Forward: {
+          let diff = directionToMoveDiff(direction, globalTurtle.rotation)
+          turtleModel.position.x += diff.diffX
+          turtleModel.position.y += diff.diffY
+          turtleModel.position.z += diff.diffZ
+          globalTurtle.x += diff.diffX
+          globalTurtle.y += diff.diffY
+          globalTurtle.z += diff.diffZ
+          break
+        }
+        case MoveDirection.Right: {
+          turtleRotateRight(globalTurtle)
+          let startLoc = directionToStartLocation(globalTurtle.rotation)
+          turtleModel.position.x = startLoc.startX + globalTurtle.x
+          turtleModel.position.z = startLoc.startZ + globalTurtle.z
+          turtleModel.rotation.y = startLoc.rotY
+          break
+        }
+        case MoveDirection.Left: {
+          turtleRotateLeft(globalTurtle)
+          let startLoc = directionToStartLocation(globalTurtle.rotation)
+          turtleModel.position.x = startLoc.startX + globalTurtle.x
+          turtleModel.position.z = startLoc.startZ + globalTurtle.z
+          turtleModel.rotation.y = startLoc.rotY
+          break
+        }
+      }
     }
 </script>
 

@@ -24,10 +24,12 @@ pub enum DatabaseActionError {
     #[error("Diesel ORM error")]
     DieselError(#[from] diesel::result::Error),
     #[error("Empty connection pool")]
-    EmptyConnectionPool
+    EmptyConnectionPool,
+    #[error("Attempted to update a field that is not in the DB (does not have valid ID)")]
+    NotInsertedUpdate
 }
 
-#[derive(Queryable, Insertable)]
+#[derive(Queryable, Insertable, AsChangeset)]
 #[diesel(table_name = turtles)]
 #[derive(Debug)]
 pub struct TurtleData {
@@ -96,5 +98,11 @@ impl TurtleData {
             .execute(connection)?;
 
         Ok(turtles::table.order(turtles::id.desc()).first(connection)?)
+    }
+
+    pub fn update(&self, connection: &mut SqliteConnection) -> Result<(), DatabaseActionError> {
+        let id: i32 = self.id.ok_or(DatabaseActionError::NotInsertedUpdate)?;
+        diesel::update(turtles::table.filter(turtles::id.eq(id))).set(self).execute(connection)?;
+        Ok(())
     }
 }

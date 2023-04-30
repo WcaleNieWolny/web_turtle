@@ -2,7 +2,7 @@ mod turtle;
 mod database;
 mod schema;
 
-use std::{net::SocketAddr, sync::Arc, collections::HashMap, time::Duration, error::Error, str::FromStr};
+use std::{net::SocketAddr, sync::Arc, collections::HashMap, time::Duration, error::Error};
 use axum::{Router, extract::{WebSocketUpgrade, ConnectInfo, ws::{WebSocket, Message}, State, Path}, response::IntoResponse, routing::{get, put}, http::StatusCode, Json};
 use database::{SqlitePool, TurtleData, Connection, DatabaseActionError};
 use tokio::{sync::{Mutex, mpsc}, time::timeout};
@@ -113,7 +113,14 @@ async fn move_turtle(
         _ => return Err((StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST.to_string())),
     };
 
-    return turtle.move_turtle(direction).await.map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
+    turtle.move_turtle(direction).await.map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+
+    let conn: Result<Connection, DatabaseActionError> = turtles.pool.clone().try_into();
+    let mut conn = conn.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Connection pool empty".to_string()))?;
+
+    turtle.turtle_data.update(&mut conn).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+
+    Ok(StatusCode::OK)
 }
 
 async fn list_turtles(

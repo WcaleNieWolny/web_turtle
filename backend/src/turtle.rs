@@ -44,9 +44,9 @@ pub struct TurtleAsyncRequest {
 
 pub enum MoveDirection {
     FORWARD,
+    RIGHT,
     BAKCWARD,
-    LEFT,
-    RIGHT
+    LEFT
 }
 
 impl ToString for MoveDirection {
@@ -64,10 +64,18 @@ impl MoveDirection {
     pub fn from_i32(number: i32) -> Self {
         match number {
             0 => Self::FORWARD,
-            1 => Self::BAKCWARD,
-            2 => Self::LEFT,
-            3 => Self::RIGHT,
+            1 => Self::RIGHT,
+            2 => Self::BAKCWARD,
+            3 => Self::LEFT,
             _ => panic!("Invalid i32 number to MoveDirection, this should NEVER happen")
+        }
+    }
+    pub fn to_i32(&self) -> i32 {
+        match &self {
+            Self::FORWARD => 0,
+            Self::RIGHT => 1,
+            Self::BAKCWARD => 2,
+            Self::LEFT => 3,
         }
     }
 }
@@ -104,12 +112,36 @@ impl Turtle {
                 "return turtle.forward()"
             },
             MoveDirection::BAKCWARD => "return turtle.back()",
-            _ => return Err(TurtleMoveError::NotImplemented)
+            MoveDirection::RIGHT => "return turtle.turnRight()",
+            MoveDirection::LEFT => "return turtle.turnLeft()"
         };
 
         let result = self.command(command).await?;
         match result.as_str() {
-            "true" => return Ok(()),
+            "true" => {
+                match direction {
+                    MoveDirection::RIGHT => {
+                        let mut enum_number = self.turtle_data.rotation;
+                        if enum_number == 3 {
+                            enum_number = 0
+                        } else {
+                            enum_number += 1
+                        }
+                        self.turtle_data.rotation = enum_number
+                    }
+                    MoveDirection::LEFT => {
+                        let mut enum_number = self.turtle_data.rotation;
+                        if enum_number == 0 {
+                            enum_number = 3
+                        } else {
+                            enum_number -= 1
+                        }
+                        self.turtle_data.rotation = enum_number
+                    },
+                    _ => {}
+                };
+                return Ok(()); 
+            },
             "false" => return Err(TurtleMoveError::CannotMove),
             _ => return Err(TurtleMoveError::InvalidTurtleResponse(result))
         }
