@@ -1,6 +1,6 @@
 use std::mem::ManuallyDrop;
 
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use serde_json::{Value, json};
 
 #[derive(Serialize)]
@@ -18,10 +18,8 @@ pub struct WorldChange {
     pub action: WorldChangeAction,
 }
 
+#[derive(Deserialize)]
 pub struct TurtleBlock {
-    pub x: i32,
-    pub y: i32,
-    pub z: i32,
     pub name: String
 }
 
@@ -46,18 +44,6 @@ impl ToString for WorldChangeAction {
             WorldChangeAction::Update(_) => "update",
             WorldChangeAction::Delete(_) => "delete",
         }.to_string()
-    }
-}
-
-impl WorldChange {
-    pub fn to_json(&self) -> Value {
-        return json!({
-            "x": self.x,
-            "y": self.y,
-            "z": self.z,
-            "action_type": self.action.to_string(),
-            "action": self.action
-        }); 
     }
 }
 

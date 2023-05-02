@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use serde_json::Value;
 use thiserror::Error;
 use tokio::{sync::{oneshot, mpsc}, time::timeout};
 use tracing::error;
@@ -42,14 +41,10 @@ pub enum TurtleMoveError {
 pub enum TurtleWorldScanError {
     #[error("Request error")]
     RequestError(#[from] TurtleRequestError),
-    #[error("Unexpected response ({0})")]
-    UnexpectedResponse(String),
     #[error("Database error")]
     DatabaseError(#[from] DatabaseActionError),
     #[error("Json error")]
     JsonError(#[from] serde_json::error::Error),
-    #[error("Json data does not contain name")]
-    NoNameInJson,
     #[error("Cannot rotate turtle")]
     TurtleRotationError(#[from] TurtleMoveError),
     #[error("Turtle does not have ID")]
@@ -218,40 +213,34 @@ impl Turtle {
             (self.command(INSPECT_UP_PAYLOAD).await?, x, y + 1, z),
         ];
 
-        let mut changes = Vec::<WorldChange>::with_capacity(blocks.len());
+         let changes = blocks
+            .into_iter()
+            .map(|(block, x, y, z)| {
+                let db_block = BlockData::read_by_xyz(connection, x, y, z).ok();
 
-        for (block, x, y, z) in blocks {
-            let db_block = BlockData::read_by_xyz(connection, x, y, z).ok();
-            if block == "No block to inspect" {
-                if db_block.is_some() {
-                    BlockData::delete_by_xyz(connection, x, y, z)?;
-                    changes.push(WorldChange {
-                        x,
-                        y,
-                        z,
-                        action: WorldChangeAction::Delete(WorldChangeDeleteBlock {}),
-                    });
-                    continue;
-                }
-            } else {
-                let block: Value = serde_json::from_str(&block)?; 
-                let name = block.get("name").ok_or(TurtleWorldScanError::NoNameInJson)?;
-                let name = name.as_str().ok_or(TurtleWorldScanError::NoNameInJson)?.to_string();
-                
-                if let Some(mut db_block) = db_block {
-                    if name != db_block.name {
-                        db_block.name = name.clone();
-                        db_block.update(connection)?;
-                        changes.push(WorldChange {
-                            x,
-                            y,
-                            z,
-                            action: WorldChangeAction::Update(WorldChangeUpdateBlock {
-                                color: world::block_color(&name) 
-                            })
-                        });
-                        continue;
+                if block == "\"No block to inspect\"" {
+                    if db_block.is_none() {
+                        return Ok(None);
                     }
+
+                    BlockData::delete_by_xyz(connection, x, y, z)?;
+                    let action = WorldChangeAction::Delete(WorldChangeDeleteBlock {});
+                    return Ok(Some(WorldChange { x, y, z, action }));
+                }
+
+                let name = serde_json::from_str::<TurtleBlock>(&block)?.name;
+                let color = world::block_color(&name);
+
+                let action = if let Some(mut db_block) = db_block {
+                    if name == db_block.name {
+                        return Ok(None);
+                    }
+
+                    db_block.name = name;
+                    db_block.update(connection)?;
+                    WorldChangeAction::Update(WorldChangeUpdateBlock {
+                        color,
+                    })
                 } else {
                     let new_db_block = BlockData {
                         id: None,
@@ -259,48 +248,18 @@ impl Turtle {
                         x,
                         y,
                         z,
-                        name: name.clone(),
+                        name,
                     };
                     new_db_block.insert(connection)?;
-                    changes.push(WorldChange {
-                        x,
-                        y,
-                        z,
-                        action: WorldChangeAction::New(WorldChangeNewBlock {
-                            color: world::block_color(&name),
-                        }),
-                    });
-                    continue;
-                }
-            }
-        }
-            
-        
+                    WorldChangeAction::New(WorldChangeNewBlock {
+                        color,
+                    })
+                };
 
-        //let ret: Result<Vec<WorldChangeAction>, TurtleWorldScanError> = blocks.iter()
-            //.filter_map(|(block, x, y, z)| {
-            //    let db_block = BlockData::read_by_xyz(connection, *x, *y, *z).ok();
-            //    if block == "No block to inspect" {
-            //        if db_block.is_some() {
-            //            if let Err(err) = BlockData::delete_by_xyz(connection, *x, *y, *z) {
-            //                Some(Err(err.into()))
-            //            } else {
-            //                Some(Ok(WorldChange {
-            //                    x: todo!(),
-            //                    y: todo!(),
-            //                    z: todo!(),
-            //                    action: todo!(),
-            //                }));
-            //            };
-            //       }
-            //    };
-            //    None
-            //})
-            //.collect();
-
-            //let down_block: Value = serde_json::from_str(&down_block)?; 
-            //let down_name = down_block.get("name").ok_or(TurtleWorldScanError::NoNameInJson)?;
-            //println!("DOWN: {down_name}");
+                Ok(Some(WorldChange { x, y, z, action }))
+            })
+            .filter_map(Result::transpose)
+            .collect::<Result<Vec<WorldChange>, TurtleWorldScanError>>()?;       
 
         Ok(changes)
     }
