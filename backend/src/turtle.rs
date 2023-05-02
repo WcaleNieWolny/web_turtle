@@ -1,12 +1,16 @@
 use std::time::Duration;
 
+use serde_json::Value;
 use thiserror::Error;
 use tokio::{sync::{oneshot, mpsc}, time::timeout};
+use tracing::error;
 
-use crate::{database::TurtleData, schema::MoveDirection};
+use crate::{database::{TurtleData, DatabaseActionError, Connection}, schema::MoveDirection, world::{WorldChangeAction, TurtleBlock}};
 
 //Lua inspect logic
-//local has_block, data = turtle.inspectDown() return textutils.serialise(data)
+static INSPECT_DOWN_PAYLOAD: &str = "local has_block, data = turtle.inspectDown() return textutils.serialiseJSON(data)";
+static INSPECT_FORWARD_PAYLOAD: &str = "local has_block, data = turtle.inspect() return textutils.serialiseJSON(data)";
+static INSPECT_UP_PAYLOAD: &str = "local has_block, data = turtle.inspectUp() return textutils.serialiseJSON(data)";
 
 #[derive(Error, Debug)]
 pub enum TurtleRequestError {
@@ -32,6 +36,22 @@ pub enum TurtleMoveError {
     CannotMove,
     #[error("Invalid turtle response ({0})")]
     InvalidTurtleResponse(String),
+}
+
+#[derive(Error, Debug)]
+pub enum TurtleWorldScanError {
+    #[error("Request error")]
+    RequestError(#[from] TurtleRequestError),
+    #[error("Unexpected response ({0})")]
+    UnexpectedResponse(String),
+    #[error("Database error")]
+    DatabaseError(#[from] DatabaseActionError),
+    #[error("Json error")]
+    JsonError(#[from] serde_json::error::Error),
+    #[error("Json data does not contain name")]
+    NoNameInJson,
+    #[error("Cannot rotate turtle")]
+    TurtleRotationError(#[from] TurtleMoveError)
 }
 
 
@@ -178,5 +198,56 @@ impl Turtle {
             "false" => return Err(TurtleMoveError::CannotMove),
             _ => return Err(TurtleMoveError::InvalidTurtleResponse(result))
         }
+    }
+
+    pub async fn scan_world_changes(&mut self, connection: &mut Connection) -> Result<Vec<WorldChangeAction>, TurtleWorldScanError> {
+        let x = self.turtle_data.x;
+        let y = self.turtle_data.y;
+        let z = self.turtle_data.z;
+        
+        let blocks: Vec<(String, i32, i32, i32)> = vec![
+            (self.command(INSPECT_DOWN_PAYLOAD).await?, x, y - 1, z),
+            {
+                let (x_diff, y_diff, z_diff) = MoveDirection::Forward.to_turtle_move_diff(&self);
+                let forward = self.command(INSPECT_FORWARD_PAYLOAD).await?;
+                (forward, x + x_diff, y + y_diff, z + z_diff)
+            },
+            (self.command(INSPECT_UP_PAYLOAD).await?, x, y + 1, z),
+        ];
+
+        let a: Result<Vec<WorldChangeAction>, _> = blocks.iter()
+            .filter_map(|(val, x, y, z)| {
+                if val == "No block to inspect" {
+                    Some(None)
+                } else {
+                    let block_json: Value = match serde_json::from_str(val) {
+                        Ok(json) => json,
+                        Err(_) => return None,
+                    };
+                    let name = match block_json.get("name") {
+                        Some(name) => name.as_str(),
+                        None => return None
+                    };
+                    if let Some(name) = name {
+                        Some(Some(TurtleBlock {
+                            x: *x,
+                            y: *y,
+                            z: *z,
+                            name: name.to_string(),
+                        }))
+                    } else {
+                        None
+                    }
+                }
+            })
+            .map(|block| {
+                let db_block = 
+            }) 
+
+            //let down_block: Value = serde_json::from_str(&down_block)?; 
+            //let down_name = down_block.get("name").ok_or(TurtleWorldScanError::NoNameInJson)?;
+            //println!("DOWN: {down_name}");
+
+        Ok(vec![])
     }
 }

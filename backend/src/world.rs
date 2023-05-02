@@ -17,6 +17,13 @@ pub struct WorldChange {
     pub action: WorldChangeAction,
 }
 
+pub struct TurtleBlock {
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+    pub name: String
+}
+
 #[derive(Serialize)]
 pub struct WorldChangeNewBlock {
     pub color: String

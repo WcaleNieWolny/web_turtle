@@ -106,3 +106,9 @@ impl TurtleData {
         Ok(())
     }
 }
+
+impl BlockData {
+    pub fn read_by_xyz(connection: &mut SqliteConnection, x: i32, y: i32, z: i32) -> QueryResult<Self> {
+        worlds_data::table.filter(worlds_data::x.eq(x).and(worlds_data::y.eq(y).and(worlds_data::z.eq(z)))).first(connection)
+    }
+}

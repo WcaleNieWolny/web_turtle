@@ -122,6 +122,8 @@ async fn move_turtle(
 
     turtle.turtle_data.update(&mut conn).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
+    let _ = turtle.scan_world_changes(&mut conn).await.map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
+
     Ok(StatusCode::OK)
 }
 
