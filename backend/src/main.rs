@@ -14,6 +14,7 @@ use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, util::Subs
 use turtle::{Turtle, TurtleRequestError, TurtleAsyncRequest};
 use uuid::Uuid;
 use serde_json::{json, Value};
+use world::WorldChange;
 
 static GET_OS_LABEL_PAYLOAD: &str = "local ok, err = os.computerLabel() return ok";
 
@@ -122,9 +123,9 @@ async fn move_turtle(
 
     turtle.turtle_data.update(&mut conn).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
-    let _ = turtle.scan_world_changes(&mut conn).await.map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
+    let changes = turtle.scan_world_changes(&mut conn).await.map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
-    Ok(StatusCode::OK)
+    Ok(Json(changes))
 }
 
 async fn list_turtles(

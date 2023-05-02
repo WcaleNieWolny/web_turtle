@@ -6,10 +6,11 @@ use serde_json::{Value, json};
 #[derive(Serialize)]
 pub enum WorldChangeAction {
     New(WorldChangeNewBlock),
-    Update(WorldChangeNewBlock),
+    Update(WorldChangeUpdateBlock),
     Delete(WorldChangeDeleteBlock)
 }
 
+#[derive(Serialize)]
 pub struct WorldChange {
     pub x: i32,
     pub y: i32,

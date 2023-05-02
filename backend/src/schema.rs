@@ -27,7 +27,7 @@ diesel::table! {
         x -> Integer,
         y -> Integer,
         z -> Integer,
-        data -> Text,
+        name -> Text,
     }
 }
 

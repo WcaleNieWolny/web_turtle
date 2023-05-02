@@ -41,7 +41,7 @@ pub struct TurtleData {
     pub rotation: MoveDirection,
 }
 
-#[derive(Queryable, Insertable)]
+#[derive(Queryable, Insertable, AsChangeset)]
 #[diesel(table_name = worlds_data)]
 pub struct BlockData {
     pub id: Option<i32>,
@@ -49,7 +49,7 @@ pub struct BlockData {
     pub x: i32,
     pub y: i32,
     pub z: i32,
-    pub data: String,
+    pub name: String,
 }
 
 pub struct Connection(pub PooledConnection<ConnectionManager<SqliteConnection>>);
@@ -110,5 +110,23 @@ impl TurtleData {
 impl BlockData {
     pub fn read_by_xyz(connection: &mut SqliteConnection, x: i32, y: i32, z: i32) -> QueryResult<Self> {
         worlds_data::table.filter(worlds_data::x.eq(x).and(worlds_data::y.eq(y).and(worlds_data::z.eq(z)))).first(connection)
+    }
+
+    pub fn delete_by_xyz(connection: &mut SqliteConnection, x: i32, y: i32, z: i32) -> Result<(), DatabaseActionError> {
+        diesel::delete(worlds_data::table.filter(worlds_data::x.eq(x).and(worlds_data::y.eq(y).and(worlds_data::z.eq(z))))).execute(connection)?;
+        Ok(())
+    }
+
+    pub fn update(&self, connection: &mut SqliteConnection) -> Result<(), DatabaseActionError> {
+        let id: i32 = self.id.ok_or(DatabaseActionError::NotInsertedUpdate)?;
+        diesel::update(worlds_data::table.filter(worlds_data::id.eq(id))).set(self).execute(connection)?;
+        Ok(())
+    }
+
+    pub fn insert(&self, connection: &mut SqliteConnection) -> Result<(), DatabaseActionError> {
+        diesel::insert_into(worlds_data::table)
+            .values(self)
+            .execute(connection)?;
+        Ok(())
     }
 }
