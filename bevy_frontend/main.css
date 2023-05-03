@@ -8,11 +8,26 @@
 
 .game_canvas {
     flex: 1;
-    display: flex;
 }
 
 .navbar_div {
     height: 64px;
     width: 100%;
     background: rebeccapurple;
+}
+
+.game_div {
+    flex: 1;
+    display: flex;
+}
+
+.navbar_item_div {
+    background-color: rgb(6 182 212);
+    margin-left: 0.25rem;
+    margin-right: 0.25rem;
+    height: 4rem;
+    width: 4rem;
+    display: table;
+    vertical-align: middle;
+    text-align: center;
 }

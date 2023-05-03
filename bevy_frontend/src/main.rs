@@ -7,8 +7,18 @@ use wasm_bindgen::prelude::*;
 use web_sys::window;
 
 #[wasm_bindgen]
-pub fn shiet() -> u32 {
-   99 
+extern "C" {
+    fn alert(s: &str);
+}
+
+fn setup_ui() {
+    let window = web_sys::window().expect("no global `window` exists");
+    let document = window.document().expect("should have a document on window");
+
+    let navbar_div = document.query_selector(".navbar_div").ok().expect("No navbar found").expect("No navbar found");
+    let first_div = document.create_element("div").expect("Cannot create div"); 
+    first_div.set_class_name("navbar_item_div");
+    navbar_div.append_child(&first_div).unwrap();
 }
 
 fn main() {
@@ -19,23 +29,25 @@ fn main() {
         console_error_panic_hook::set_once();
         console_log::init_with_level(Level::Warn).unwrap();
     }
-    
-App::new()
-    .add_plugins(
-        DefaultPlugins.build()
-            .set(WindowPlugin {
-                primary_window: Some(Window {
-                    fit_canvas_to_parent: true,
-                    canvas: Some(".game_canvas".to_string()), 
+
+    setup_ui();
+
+    App::new()
+        .add_plugins(
+            DefaultPlugins.build()
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        fit_canvas_to_parent: true,
+                        canvas: Some(".game_canvas".to_string()), 
+                        ..default()
+                    }),
                     ..default()
-                }),
-                ..default()
-            })
-    )
-    .insert_resource(Msaa::Sample4)
-    .add_plugin(PanOrbitCameraPlugin)
-    .add_startup_system(setup)
-    .run();
+                })
+        )
+        .insert_resource(Msaa::Sample4)
+        .add_plugin(PanOrbitCameraPlugin)
+        .add_startup_system(setup)
+        .run();
 }
 
 //https://bevyengine.org/examples/3d/3d-scene/
