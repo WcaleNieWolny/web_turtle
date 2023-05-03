@@ -1,0 +1,11 @@
+[package]
+name = "bevy_frontend"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bevy = "0.10"
+bevy_panorbit_camera = "0.4.1"
+console_error_panic_hook = "0.1"

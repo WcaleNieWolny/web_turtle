@@ -30,7 +30,8 @@
     scene.background = new THREE.Color(0x5b7cb6)
 
     renderer = new THREE.WebGLRenderer({
-      canvas: canvas
+      canvas: canvas,
+      antialias: true
     })
     renderer.setSize(canvas.clientWidth, canvas.clientHeight)
 

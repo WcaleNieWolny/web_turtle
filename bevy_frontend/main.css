@@ -1,0 +1,18 @@
+.main {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    min-height: 100vh;
+    width: 100%;
+}
+
+.game_canvas {
+    flex: 1;
+    display: flex;
+}
+
+.navbar_div {
+    height: 64px;
+    width: 100%;
+    background: rebeccapurple;
+}
