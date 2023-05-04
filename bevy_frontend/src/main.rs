@@ -1,24 +1,45 @@
 use std::f32::consts::TAU;
 
+use log::warn;
 use bevy::prelude::*;
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use js_sys::JsString;
+use shared::JsonTurtle;
 use wasm_bindgen::prelude::*;
-use web_sys::window;
+use wasm_bindgen_futures::{JsFuture, spawn_local};
+use web_sys::{window, RequestInit, Request, Response};
 
-#[wasm_bindgen]
-extern "C" {
-    fn alert(s: &str);
-}
-
-fn setup_ui() {
+async fn get_turtles_list() -> Vec<JsonTurtle> {
     let window = web_sys::window().expect("no global `window` exists");
     let document = window.document().expect("should have a document on window");
+    
+    let mut get_turtles_url = document.base_uri().expect("Base uri get fail").expect("No base uri");
+    get_turtles_url.push_str("turtle/list/");
 
+    warn!("{get_turtles_url}");
+
+    let mut opts = RequestInit::new();
+    opts.method("GET");
+    let request = Request::new_with_str_and_init(&get_turtles_url, &opts).expect("Cannot create new request");
+    let resp_value = JsFuture::from(window.fetch_with_request(&request)).await.expect("Cannot fetch value");
+
+    assert!(resp_value.is_instance_of::<Response>());
+    let resp: Response = resp_value.dyn_into().expect("Cannot cast into response");
+
+    let json = JsFuture::from(resp.json().unwrap()).await.expect("Cannot get future from JS");
+    return serde_wasm_bindgen::from_value(json).expect("Json serde error");
+}
+
+async fn setup_ui() {
+    let window = web_sys::window().expect("no global `window` exists");
+    let document = window.document().expect("should have a document on window");
     let navbar_div = document.query_selector(".navbar_div").ok().expect("No navbar found").expect("No navbar found");
-    let first_div = document.create_element("div").expect("Cannot create div"); 
-    first_div.set_class_name("navbar_item_div");
-    navbar_div.append_child(&first_div).unwrap();
+
+    for turtle in get_turtles_list().await {
+        let turtle_navbar_div = document.create_element("div").expect("Cannot create div"); 
+        turtle_navbar_div.set_class_name("navbar_item_div");
+        navbar_div.append_child(&turtle_navbar_div).unwrap();
+    }
 }
 
 fn main() {
@@ -29,8 +50,13 @@ fn main() {
         console_error_panic_hook::set_once();
         console_log::init_with_level(Level::Warn).unwrap();
     }
+    spawn_local(async {
+        async_main().await
+    });
+}
 
-    setup_ui();
+async fn async_main() {
+    setup_ui().await;
 
     App::new()
         .add_plugins(

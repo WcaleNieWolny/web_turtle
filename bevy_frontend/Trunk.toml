@@ -2,3 +2,7 @@
 pattern_script = "<script type=\"module\">import init, * as from_rust from '{base}{js}';init('{base}{wasm}').then(()=>window.from_rust=from_rust);</script>"
 target = "index.html"
 dist = "dist"
+
+[[proxy]]
+rewrite = "/turtle/"
+backend = "http://localhost:8000/turtle/"

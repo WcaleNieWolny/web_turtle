@@ -7,14 +7,13 @@ use std::{net::SocketAddr, sync::Arc, collections::HashMap, time::Duration, erro
 use axum::{Router, extract::{WebSocketUpgrade, ConnectInfo, ws::{WebSocket, Message}, State, Path}, response::IntoResponse, routing::{get, put}, http::StatusCode, Json};
 use database::{SqlitePool, TurtleData, Connection, DatabaseActionError};
 use schema::MoveDirection;
+use shared::JsonTurtle;
 use tokio::{sync::{Mutex, mpsc}, time::timeout};
 use tower_http::{trace::{TraceLayer, DefaultMakeSpan}, cors::{CorsLayer, Any}};
 use tracing::{error, warn, debug};
 use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt};
 use turtle::{Turtle, TurtleRequestError, TurtleAsyncRequest};
 use uuid::Uuid;
-use serde_json::{json, Value};
-use world::WorldChange;
 
 static GET_OS_LABEL_PAYLOAD: &str = "local ok, err = os.computerLabel() return ok";
 
@@ -60,7 +59,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // run it with hyper
     //
-    let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
+    let addr = SocketAddr::from(([0, 0, 0, 0], 8000));
     tracing::debug!("listening on {}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service_with_connect_info::<SocketAddr>())
@@ -130,21 +129,21 @@ async fn move_turtle(
 
 async fn list_turtles(
     State(turtles): State<TurtlesState>
-) -> Json<Vec<Value>>{
+) -> Json<Vec<JsonTurtle>>{
     let turtles = turtles.turtles.lock().await;
 
     return Json(
         turtles.iter()
         .enumerate()
         .map(|(id, (uuid, turtle))| {
-            json!({
-                "id": id,
-                "uuid": uuid.to_string(),
-                "x": turtle.turtle_data.x,
-                "y": turtle.turtle_data.y,
-                "z": turtle.turtle_data.z,
-                "rotation": turtle.turtle_data.rotation.to_string()
-            })
+            JsonTurtle {
+                id,
+                uuid: *uuid,
+                x: turtle.turtle_data.x, 
+                y: turtle.turtle_data.y,
+                z: turtle.turtle_data.z,
+                rotation: turtle.turtle_data.rotation.to_json_enum(),
+            }
         })
         .collect());
 }

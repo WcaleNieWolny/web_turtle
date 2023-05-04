@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use shared::JsonTurtleRotation;
 use thiserror::Error;
 use tokio::{sync::{oneshot, mpsc}, time::timeout};
 use tracing::error;
@@ -121,6 +122,15 @@ impl MoveDirection {
                     _ => unreachable!()
                 }
             },
+        }
+    }
+
+    pub fn to_json_enum(&self) -> JsonTurtleRotation {
+        match self {
+            MoveDirection::Forward => JsonTurtleRotation::Forward,
+            MoveDirection::Right => JsonTurtleRotation::Right,
+            MoveDirection::Backward => JsonTurtleRotation::Backward,
+            MoveDirection::Left => JsonTurtleRotation::Left,
         }
     }
 }

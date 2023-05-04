@@ -13,7 +13,7 @@
 .navbar_div {
     height: 64px;
     width: 100%;
-    background: rebeccapurple;
+    background-color: rgb(41 37 36);
 }
 
 .game_div {
@@ -30,4 +30,11 @@
     display: table;
     vertical-align: middle;
     text-align: center;
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+}
+
+.navbar_item_div:hover {
+    background-color: rgb(34 197 94);
 }
