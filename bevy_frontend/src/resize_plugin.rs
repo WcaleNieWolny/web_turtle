@@ -25,7 +25,7 @@ fn init_resize_system(mut commands: Commands) {
 
     let resize_closure = Closure::wrap(Box::new(|_: UiEvent| {
         let tx = unsafe {
-            RESIZE_TX.as_mut().unwrap()
+            RESIZE_TX.as_mut().unwrap_unchecked()
         };
 
         let local_window = web_sys::window().expect("no global `window` exists");

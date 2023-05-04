@@ -1,7 +1,7 @@
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub enum JsonTurtleRotation {
     Forward,
     Right,
@@ -9,7 +9,7 @@ pub enum JsonTurtleRotation {
     Left
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct JsonTurtle {
     pub id: usize,
     pub uuid: Uuid, 
