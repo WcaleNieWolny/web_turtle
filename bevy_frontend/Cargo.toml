@@ -13,7 +13,6 @@ console_log = "1.0.0"
 log = "0.4"
 wasm-bindgen = { version = "0.2", features = ["serde-serialize"] }
 wasm-bindgen-futures = "0.4"
-js-sys = "0.3.6"
 shared = { path = "../shared/" }
 serde = { version = "1", features = ["derive"] }
 serde-wasm-bindgen = "0.4"

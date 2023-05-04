@@ -1,4 +1,4 @@
-use bevy::{prelude::*, window::WindowResolution};
+use bevy::prelude::*;
 use futures::channel::mpsc::{Receiver, Sender, self};
 use wasm_bindgen::{prelude::Closure, JsCast};
 use web_sys::UiEvent;
@@ -23,7 +23,7 @@ fn init_resize_system(mut commands: Commands) {
 
     let window = web_sys::window().expect("no global `window` exists");
 
-    let resize_closure = Closure::wrap(Box::new(|e: UiEvent| {
+    let resize_closure = Closure::wrap(Box::new(|_: UiEvent| {
         let tx = unsafe {
             RESIZE_TX.as_mut().unwrap()
         };

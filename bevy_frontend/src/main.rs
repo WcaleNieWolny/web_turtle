@@ -7,12 +7,11 @@ use std::panic;
 use log::warn;
 use bevy::prelude::*;
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
-use js_sys::JsString;
 use resize_system::ResizePlugin;
 use shared::JsonTurtle;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{JsFuture, spawn_local};
-use web_sys::{window, RequestInit, Request, Response};
+use web_sys::{RequestInit, Request, Response};
 
 async fn get_turtles_list() -> Vec<JsonTurtle> {
     let window = web_sys::window().expect("no global `window` exists");
@@ -40,7 +39,7 @@ async fn setup_ui() {
     let document = window.document().expect("should have a document on window");
     let navbar_div = document.query_selector(".navbar_div").ok().expect("No navbar found").expect("No navbar found");
 
-    for turtle in get_turtles_list().await {
+    for _ in get_turtles_list().await {
         let turtle_navbar_div = document.create_element("div").expect("Cannot create div"); 
         turtle_navbar_div.set_class_name("navbar_item_div");
         navbar_div.append_child(&turtle_navbar_div).unwrap();
@@ -86,11 +85,6 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    //Export to JS
-    let window: JsValue = window().unwrap().into(); 
-    let shiet_str: JsValue = JsString::from("aa").into();
-    
-
     // plane
     commands.spawn(PbrBundle {
         mesh: meshes.add(shape::Plane::from_size(5.0).into()),
