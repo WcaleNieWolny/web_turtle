@@ -1,14 +1,14 @@
 use std::sync::{Arc, RwLock};
 
 use shared::JsonTurtle;
-use uuid::Uuid;
 use wasm_bindgen::prelude::*;
-use bevy::{prelude::*, utils::HashMap};
+use bevy::prelude::*;
 use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{RequestInit, Request, Response, PointerEvent, HtmlElement};
 
 static mut MAIN_TURTLE: Option<Arc<RwLock<Option<JsonTurtle>>>> = None;
 static mut TURTLE_VEC: Option<Arc<RwLock<Vec<JsonTurtle>>>> = None;
+static mut ON_CLICK_CLOSURE: Option<JsValue> = None;
 
 #[derive(Component)]
 struct MainTurtle(Arc<RwLock<Option<JsonTurtle>>>);
@@ -26,16 +26,13 @@ fn setup_ui_system(mut commands: Commands) {
         // create the repeating timer
         timer: Timer::new(std::time::Duration::from_secs(3), TimerMode::Repeating),
     });
-    let window = web_sys::window().expect("no global `window` exists");
-    let document = window.document().expect("should have a document on window");
-    let navbar_div = document.query_selector(".navbar_div").ok().expect("No navbar found").expect("No navbar found");
 
     let main_turtle: Arc<RwLock<Option<JsonTurtle>>> = Arc::new(RwLock::new(None));
     let turtle_vec: Arc<RwLock<Vec<JsonTurtle>>> = Arc::new(RwLock::new(Vec::new()));
     //Again, do not care about unsafe :)
     unsafe {
         MAIN_TURTLE = Some(main_turtle.clone());
-        TURTLE_VEC = Some(turtle_vec)
+        TURTLE_VEC = Some(turtle_vec.clone())
     }
 
     let on_click_closure = Closure::wrap(Box::new(|e: PointerEvent| {
@@ -66,48 +63,54 @@ fn setup_ui_system(mut commands: Commands) {
         //Here we will write into MAIN_TURTLE static (This is something to be implemented) 
     }) as Box<dyn FnMut(_)>);
 
+    unsafe {
+        ON_CLICK_CLOSURE = Some(on_click_closure.into_js_value());
+    }
+
     //Register main turtle with bevy!
-    commands.spawn(MainTurtle(main_turtle));
+    commands.spawn(MainTurtle(main_turtle.clone()));
 
     //This spawn thing is expensive, but whatevet
     spawn_local(async move {
-        let turtle_list = get_turtles_list().await;
-        let global_turtle_vec = unsafe {
-            TURTLE_VEC.as_mut().unwrap_unchecked()
-        };
-
-        let main_turtle = unsafe{ 
-            MAIN_TURTLE.as_mut().unwrap_unchecked() 
-        };
-
-        let mut global_turtles_guard = global_turtle_vec.write().expect("Cannot lock global turtles!");
-        let mut main_turtle_guard = main_turtle.write().expect("Cannot lock main turtle");
-
-        if let Some(global_turtle) = main_turtle_guard.as_mut() {
-            if !turtle_list.contains(global_turtle) {
-                *main_turtle_guard = None;
-            }
-        }
-
-        for (i, turtle) in turtle_list.iter().enumerate() {
-            if let Some(global_turtle) = global_turtles_guard.get(i) {
-                if global_turtle == turtle {
-                    continue;
-                }
-            }
-
-            let turtle_navbar_div = document.create_element("div").expect("Cannot create div"); 
-            turtle_navbar_div.set_class_name("navbar_item_div");
-            turtle_navbar_div.add_event_listener_with_callback("pointerdown", &on_click_closure.as_ref().unchecked_ref()).expect("Cannot set event listener");
-            turtle_navbar_div.set_attribute("data-id", &i.to_string()).expect("Cannot set uuid atribute");
-            navbar_div.append_child(&turtle_navbar_div).unwrap();
-        }
-
-        *global_turtles_guard = turtle_list.clone();
-
-        //Required or BAD things will happen!
-        on_click_closure.forget();
+        //This will init the turtles list
+        update_turtle_list(main_turtle, turtle_vec).await;
     });
+}
+
+async fn update_turtle_list(main_turtle: Arc<RwLock<Option<JsonTurtle>>>, global_turtle_vec: Arc<RwLock<Vec<JsonTurtle>>>) {
+    let window = web_sys::window().expect("no global `window` exists");
+    let document = window.document().expect("should have a document on window");
+    let navbar_div = document.query_selector(".navbar_div").ok().expect("No navbar found").expect("No navbar found");
+
+    let turtle_list = get_turtles_list().await;
+
+    let mut global_turtles_guard = global_turtle_vec.write().expect("Cannot lock global turtles!");
+    let mut main_turtle_guard = main_turtle.write().expect("Cannot lock main turtle");
+    let on_click_closure = unsafe {
+        ON_CLICK_CLOSURE.as_ref().unwrap_unchecked()
+    };
+
+    if let Some(global_turtle) = main_turtle_guard.as_mut() {
+        if !turtle_list.contains(global_turtle) {
+            *main_turtle_guard = None;
+        }
+    }
+
+    for (i, turtle) in turtle_list.iter().enumerate() {
+        if let Some(global_turtle) = global_turtles_guard.get(i) {
+            if global_turtle == turtle {
+                continue;
+            }
+        }
+
+        let turtle_navbar_div = document.create_element("div").expect("Cannot create div"); 
+        turtle_navbar_div.set_class_name("navbar_item_div");
+        turtle_navbar_div.add_event_listener_with_callback("pointerdown", on_click_closure.unchecked_ref()).expect("Cannot set event listener");
+        turtle_navbar_div.set_attribute("data-id", &i.to_string()).expect("Cannot set uuid atribute");
+        navbar_div.append_child(&turtle_navbar_div).unwrap();
+    }
+
+    *global_turtles_guard = turtle_list.clone();
 }
 
 async fn get_turtles_list() -> Vec<JsonTurtle> {
