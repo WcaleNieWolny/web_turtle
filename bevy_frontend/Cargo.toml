@@ -17,6 +17,7 @@ js-sys = "0.3.6"
 shared = { path = "../shared/" }
 serde = { version = "1", features = ["derive"] }
 serde-wasm-bindgen = "0.4"
+futures = "0.3"
 
 [dependencies.web-sys]
 version = "0.3.6"
@@ -29,5 +30,6 @@ features = [
   'Request',
   'RequestInit',
   'RequestMode',
-  'Response'
+  'Response',
+  'UiEvent'
 ]

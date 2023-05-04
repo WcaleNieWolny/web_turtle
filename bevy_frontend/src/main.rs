@@ -1,9 +1,14 @@
+mod resize_system;
+
 use std::f32::consts::TAU;
+extern crate console_error_panic_hook;
+use std::panic;
 
 use log::warn;
 use bevy::prelude::*;
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use js_sys::JsString;
+use resize_system::ResizePlugin;
 use shared::JsonTurtle;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{JsFuture, spawn_local};
@@ -44,12 +49,9 @@ async fn setup_ui() {
 
 fn main() {
     // When building for WASM, print panics to the browser console
-    #[cfg(target_arch = "wasm32")]
-    {
-        use log::Level;
-        console_error_panic_hook::set_once();
-        console_log::init_with_level(Level::Warn).unwrap();
-    }
+    use log::Level;
+    panic::set_hook(Box::new(console_error_panic_hook::hook));
+    console_log::init_with_level(Level::Warn).unwrap();
     spawn_local(async {
         async_main().await
     });
@@ -71,6 +73,7 @@ async fn async_main() {
                 })
         )
         .insert_resource(Msaa::Sample4)
+        .add_plugin(ResizePlugin)
         .add_plugin(PanOrbitCameraPlugin)
         .add_startup_system(setup)
         .run();
