@@ -47,6 +47,7 @@
     vertical-align: middle;
     font-size: 1.25rem;
     line-height: 1.75rem;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
 
 .refresh_button {
@@ -61,4 +62,12 @@
     border-color: rgb(6 182 212 / 1);
     border-style: solid;
     padding: 0;
+}
+
+.green-border {
+    border-radius: 0.5rem;
+    border-width: 5px;
+    border-color: rgb(21 128 61);
+    border-style: solid;
+    box-sizing: border-box;
 }

@@ -35,6 +35,7 @@ fn setup_ui_system(mut commands: Commands) {
     let on_click_closure = Closure::wrap(Box::new(|e: PointerEvent| {
         let target = e.target().expect("No event target!");
         let target = target.dyn_ref::<HtmlElement>().expect("Clicked element not a HTML element");
+        let parrent_element = target.parent_element().expect("No parrent element found!");
         let id = target.get_attribute("data-id").expect("No ID atribute, THE USER IS A HACKER, NOT COOL BRO!!!!!!!!!");
         let id = id.parse::<usize>().expect("Invalid UUID, THE USER HAS TAMPERED WITH THE UUID!!!!!");
 
@@ -49,10 +50,20 @@ fn setup_ui_system(mut commands: Commands) {
         let global_turtles_guard = global_turtle_vec.read().expect("Cannot lock global turtles!");
         let mut main_turtle_guard = main_turtle.write().expect("Cannot lock main turtle");
 
+        if let Some(other_turtle) = main_turtle_guard.as_ref() {
+            let window = web_sys::window().expect("no global `window` exists");
+            let document = window.document().expect("should have a document on window");
+            let other_turtle_element = document.query_selector(&format!("[data-id=\"{}\"]", other_turtle.id)).expect("Query select error").expect("The previous main turtle element was removed");
+            let other_turtle_element_parrent = other_turtle_element.parent_element().expect("No parrent element found on other_turtle_element");
+            other_turtle_element_parrent.set_class_name("navbar_item_div"); //Remove border
+        }
+
         if id >= global_turtles_guard.len() {
             log::error!("DO NOT FUCKING TRY TO HACK MY APP!!!!!!!!!!!!!");
             return;
         };
+
+        parrent_element.set_class_name("navbar_item_div green-border");
 
         let new_global_turtle = global_turtles_guard[id].clone();
         *main_turtle_guard = Some(new_global_turtle);
