@@ -1,4 +1,4 @@
-use std::{sync::{Arc, RwLock}, collections::hash_map::ValuesMut};
+use std::{sync::{Arc, RwLock}, collections::hash_map::ValuesMut, ops::Deref};
 
 use shared::JsonTurtle;
 use wasm_bindgen::prelude::*;
@@ -11,22 +11,19 @@ static mut TURTLE_VEC: Option<Arc<RwLock<Vec<JsonTurtle>>>> = None;
 static mut ON_CLICK_CLOSURE: Option<JsValue> = None;
 
 #[derive(Component)]
-struct MainTurtle(Arc<RwLock<Option<JsonTurtle>>>);
-
-#[derive(Resource)]
-struct BombsSpawnConfig {
-    /// How often to spawn a new bomb? (repeating timer)
-    timer: Timer,
-}
+pub struct MainTurtle(Arc<RwLock<Option<JsonTurtle>>>);
 
 pub struct UiPlugin;
 
-fn setup_ui_system(mut commands: Commands) {
-    commands.insert_resource(BombsSpawnConfig {
-        // create the repeating timer
-        timer: Timer::new(std::time::Duration::from_secs(3), TimerMode::Repeating),
-    });
+impl Deref for MainTurtle {
+    type Target = Arc<RwLock<Option<JsonTurtle>>>;
 
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+fn setup_ui_system(mut commands: Commands) {
     let main_turtle: Arc<RwLock<Option<JsonTurtle>>> = Arc::new(RwLock::new(None));
     let turtle_vec: Arc<RwLock<Vec<JsonTurtle>>> = Arc::new(RwLock::new(Vec::new()));
     //Again, do not care about unsafe :)
@@ -136,8 +133,11 @@ async fn update_turtle_list(main_turtle: &Arc<RwLock<Option<JsonTurtle>>>, globa
         });
 
     for (i, turtle) in turtle_list.iter().enumerate() {
-        if let Some(global_turtle) = global_turtles_guard.get(i) {
+        if let Some(global_turtle) = global_turtles_guard.get_mut(i) {
             if global_turtle == turtle {
+                continue;
+            } else {
+                *global_turtle = turtle.clone();
                 continue;
             }
         }
@@ -175,27 +175,12 @@ async fn get_turtles_list() -> Vec<JsonTurtle> {
     assert!(resp_value.is_instance_of::<Response>());
     let resp: Response = resp_value.dyn_into().expect("Cannot cast into response");
 
-    let json = JsFuture::from(resp.json().unwrap()).await.expect("Cannot get future from JS");
+    let json = JsFuture::from(resp.json().expect("Cannot get json")).await.expect("Cannot get future from JS");
     return serde_wasm_bindgen::from_value(json).expect("Json serde error");
-}
-
-fn check_turtle(
-    time: Res<Time>,
-    mut config: ResMut<BombsSpawnConfig>,
-    main_turtle: Query<&MainTurtle>
-) {
-    config.timer.tick(time.delta());
-
-    if config.timer.finished() {
-        let main_turtle = main_turtle.single();
-        let guard = main_turtle.0.read().expect("Cannot read from main_turtle!");
-        log::warn!("Turtle is some: {}", guard.is_some());
-    }
 }
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(setup_ui_system)
-            .add_system(check_turtle);
+        app.add_startup_system(setup_ui_system);
     }
 }

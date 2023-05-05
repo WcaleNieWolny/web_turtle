@@ -1,5 +1,5 @@
 // @generated automatically by Diesel CLI.
-#[derive(diesel_derive_enum::DbEnum, Debug)]
+#[derive(diesel_derive_enum::DbEnum, Debug, Clone)]
 pub enum MoveDirection {
     Forward,
     Right,

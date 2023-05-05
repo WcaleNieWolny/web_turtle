@@ -1,11 +1,11 @@
 use std::time::Duration;
 
-use shared::JsonTurtleRotation;
+use shared::{JsonTurtleRotation, WorldChange, WorldChangeAction, WorldChangeDeleteBlock, TurtleBlock, WorldChangeUpdateBlock, WorldChangeNewBlock};
 use thiserror::Error;
 use tokio::{sync::{oneshot, mpsc}, time::timeout};
 use tracing::error;
 
-use crate::{database::{TurtleData, DatabaseActionError, Connection, BlockData}, schema::MoveDirection, world::{WorldChangeAction, TurtleBlock, WorldChange, WorldChangeDeleteBlock, WorldChangeUpdateBlock, self, WorldChangeNewBlock}};
+use crate::{database::{TurtleData, DatabaseActionError, Connection, BlockData}, schema::MoveDirection, world};
 
 //Lua inspect logic
 static INSPECT_DOWN_PAYLOAD: &str = "local has_block, data = turtle.inspectDown() return textutils.serialiseJSON(data)";
@@ -60,12 +60,7 @@ pub struct TurtleAsyncRequest {
 
 impl ToString for MoveDirection {
     fn to_string(&self) -> String {
-        match self {
-            MoveDirection::Forward => "forward".to_string(),
-            MoveDirection::Backward => "backward".to_string(),
-            MoveDirection::Left => "left".to_string(),
-            MoveDirection::Right => "right".to_string(),
-        }
+        self.to_json_enum().to_string()
     }
 }
 
@@ -93,36 +88,7 @@ impl MoveDirection {
     /// # Safety 
     /// NEVER CALL THIS FUNCTION WITH MoveDirection::Left OR MoveDirection:Right
     fn to_turtle_move_diff(&self, turtle: &Turtle) -> (i32, i32, i32) {
-        match turtle.turtle_data.rotation {
-            MoveDirection::Forward => {
-                match self {
-                    MoveDirection::Forward => (1, 0, 0),
-                    MoveDirection::Backward => (-1, 0, 0),
-                    _ => unreachable!()
-                }
-            },
-            MoveDirection::Backward => {
-                match self {
-                    MoveDirection::Forward => (-1, 0, 0),
-                    MoveDirection::Backward => (1, 0, 0),
-                    _ => unreachable!()
-                }
-            },
-            MoveDirection::Left => {
-                match self {
-                    MoveDirection::Forward => (0, 0, -1),
-                    MoveDirection::Backward => (0, 0, 1),
-                    _ => unreachable!()
-                }
-            },
-            MoveDirection::Right => {
-                match self {
-                    MoveDirection::Forward => (0, 0, 1),
-                    MoveDirection::Backward => (0, 0, -1),
-                    _ => unreachable!()
-                }
-            },
-        }
+        return self.to_json_enum().to_turtle_move_diff(turtle.turtle_data.rotation.to_json_enum())
     }
 
     pub fn to_json_enum(&self) -> JsonTurtleRotation {

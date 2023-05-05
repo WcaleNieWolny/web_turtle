@@ -1,0 +1,50 @@
+use std::{time::Duration, collections::hash_map::ValuesMut};
+
+use bevy::prelude::*;
+
+use crate::ui_plugin::MainTurtle;
+
+pub struct MovePlugin;
+
+#[derive(Resource)]
+struct MoveGateTimer {
+    allow_move: bool,
+    timer: Timer,
+}
+
+impl Plugin for MovePlugin {
+    fn build(&self, app: &mut App) {
+        app.insert_resource(MoveGateTimer {
+            allow_move: true,
+            timer: Timer::new(Duration::from_millis(500), TimerMode::Repeating)
+        });
+    }
+}
+
+fn control_timer( 
+    time: Res<Time>,
+    mut timer: ResMut<MoveGateTimer>
+) {
+    timer.timer.tick(time.delta());
+    if timer.timer.finished() {
+        timer.allow_move = true
+    }
+}
+
+fn keybord_input(
+    keys: Res<Input<KeyCode>>,
+    main_turtle: Query<&MainTurtle>,
+    gate: Res<MoveGateTimer>
+) {
+    if !gate.allow_move {
+        return;
+    }
+
+    let guard = main_turtle.single().read().expect("Cannot lock main turtle, should never happen!");
+    let main_turtle = match &*guard {
+        Some(val) => val,
+        None => return
+    };
+    let uuid = main_turtle.uuid.clone();
+    drop(guard);
+}

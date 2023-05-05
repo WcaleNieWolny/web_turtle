@@ -7,7 +7,7 @@ use std::{net::SocketAddr, sync::Arc, collections::HashMap, time::Duration, erro
 use axum::{Router, extract::{WebSocketUpgrade, ConnectInfo, ws::{WebSocket, Message}, State, Path}, response::IntoResponse, routing::{get, put}, http::StatusCode, Json};
 use database::{SqlitePool, TurtleData, Connection, DatabaseActionError};
 use schema::MoveDirection;
-use shared::JsonTurtle;
+use shared::{JsonTurtle, TurtleMoveResponse};
 use tokio::{sync::{Mutex, mpsc}, time::timeout};
 use tower_http::{trace::{TraceLayer, DefaultMakeSpan}, cors::{CorsLayer, Any}};
 use tracing::{error, warn, debug};
@@ -124,7 +124,13 @@ async fn move_turtle(
 
     let changes = turtle.scan_world_changes(&mut conn).await.map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
-    Ok(Json(changes))
+    Ok(Json(TurtleMoveResponse {
+        x: turtle.turtle_data.x,
+        y: turtle.turtle_data.y,
+        z: turtle.turtle_data.z,
+        rotation: turtle.turtle_data.rotation.to_json_enum(),
+        changes,
+    }))
 }
 
 async fn list_turtles(
