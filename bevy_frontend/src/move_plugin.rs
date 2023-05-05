@@ -130,12 +130,12 @@ fn recive_notification(
                             let (start_x, start_z, rot_y): (f32, f32, f32) = match response.rotation {
                                 JsonTurtleRotation::Forward => (0.0, 0.0, 0.0),
                                 JsonTurtleRotation::Backward => (1.0, 1.0, std::f32::consts::PI),
-                                JsonTurtleRotation::Left => (-0.5, -0.5, 0.0),
-                                JsonTurtleRotation::Right => (0.5, 0.5, std::f32::consts::PI),
+                                JsonTurtleRotation::Right => (1.0, 0.0, std::f32::consts::PI * 1.5),
+                                JsonTurtleRotation::Left => (0.0, 1.0, std::f32::consts::PI / 2.0),
                             };
 
                             let mut turtle_transform = turtle_object_query.single_mut();
-                            turtle_transform.translation = Vec3::new(start_x as f32, response.y as f32 + 0.5, start_z as f32);
+                            turtle_transform.translation = Vec3::new(start_x + response.x as f32, response.y as f32 + 0.5, start_z + response.z as f32);
                             turtle_transform.rotation = Quat::from_euler(EulerRot::YXZ, rot_y, 0.0, 0.0); 
                         },
                         None => {}

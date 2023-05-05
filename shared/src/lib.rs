@@ -27,28 +27,28 @@ impl JsonTurtleRotation {
     /// NEVER CALL THIS FUNCTION WITH MoveDirection::Left OR MoveDirection:Right
     pub fn to_turtle_move_diff(&self, turtle_rotation: JsonTurtleRotation) -> (i32, i32, i32) {
         match turtle_rotation {
-            JsonTurtleRotation::Forward => {
+            JsonTurtleRotation::Right => {
                 match self {
                     JsonTurtleRotation::Forward => (1, 0, 0),
                     JsonTurtleRotation::Backward => (-1, 0, 0),
                     _ => unreachable!()
                 }
             },
-            JsonTurtleRotation::Backward => {
+            JsonTurtleRotation::Left => {
                 match self {
                     JsonTurtleRotation::Forward => (-1, 0, 0),
                     JsonTurtleRotation::Backward => (1, 0, 0),
                     _ => unreachable!()
                 }
             },
-            JsonTurtleRotation::Left => {
+            JsonTurtleRotation::Forward => {
                 match self {
                     JsonTurtleRotation::Forward => (0, 0, -1),
                     JsonTurtleRotation::Backward => (0, 0, 1),
                     _ => unreachable!()
                 }
             },
-            JsonTurtleRotation::Right => {
+            JsonTurtleRotation::Backward => {
                 match self {
                     JsonTurtleRotation::Forward => (0, 0, 1),
                     JsonTurtleRotation::Backward => (0, 0, -1),
