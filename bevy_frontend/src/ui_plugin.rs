@@ -1,10 +1,10 @@
-use std::sync::{Arc, RwLock};
+use std::{sync::{Arc, RwLock}, collections::hash_map::ValuesMut};
 
 use shared::JsonTurtle;
 use wasm_bindgen::prelude::*;
 use bevy::prelude::*;
 use wasm_bindgen_futures::{JsFuture, spawn_local};
-use web_sys::{RequestInit, Request, Response, PointerEvent, HtmlElement};
+use web_sys::{RequestInit, Request, Response, PointerEvent, HtmlElement, MouseEvent};
 
 static mut MAIN_TURTLE: Option<Arc<RwLock<Option<JsonTurtle>>>> = None;
 static mut TURTLE_VEC: Option<Arc<RwLock<Vec<JsonTurtle>>>> = None;
@@ -67,20 +67,41 @@ fn setup_ui_system(mut commands: Commands) {
         ON_CLICK_CLOSURE = Some(on_click_closure.into_js_value());
     }
 
+    //Setup refresh_button
+    let window = web_sys::window().expect("no global `window` exists");
+    let document = window.document().expect("should have a document on window");
+    let refresh_button = document.query_selector(".refresh_button").ok().expect("No refresh button found").expect("No refresh_button found");
+    let refresh_button_closure = Closure::wrap(Box::new(|_: MouseEvent| {
+        let main_turtle = unsafe {
+            MAIN_TURTLE.as_ref().unwrap_unchecked()
+        };
+        let turtle_vec = unsafe {
+            TURTLE_VEC.as_ref().unwrap_unchecked()
+        };
+
+        spawn_local(async move {
+            //This will refresh the turtle list
+            update_turtle_list(main_turtle, turtle_vec).await;
+        });
+    }) as Box<dyn FnMut(_)>);
+    refresh_button.add_event_listener_with_callback("click", &refresh_button_closure.as_ref().unchecked_ref()).expect("Cannot add refresh_button on click event");
+    refresh_button_closure.forget();
+
     //Register main turtle with bevy!
     commands.spawn(MainTurtle(main_turtle.clone()));
 
     //This spawn thing is expensive, but whatevet
     spawn_local(async move {
         //This will init the turtles list
-        update_turtle_list(main_turtle, turtle_vec).await;
+        update_turtle_list(&main_turtle, &turtle_vec).await;
     });
 }
 
-async fn update_turtle_list(main_turtle: Arc<RwLock<Option<JsonTurtle>>>, global_turtle_vec: Arc<RwLock<Vec<JsonTurtle>>>) {
+async fn update_turtle_list(main_turtle: &Arc<RwLock<Option<JsonTurtle>>>, global_turtle_vec: &Arc<RwLock<Vec<JsonTurtle>>>) {
     let window = web_sys::window().expect("no global `window` exists");
     let document = window.document().expect("should have a document on window");
-    let navbar_div = document.query_selector(".navbar_div").ok().expect("No navbar found").expect("No navbar found");
+    let navbar_div = document.query_selector(".navbar_div").expect("No navbar found").expect("No navbar found");
+    let refresh_button = document.query_selector(".refresh_button").ok().expect("No refresh button found").expect("No navbar found");
 
     let turtle_list = get_turtles_list().await;
 
@@ -96,6 +117,24 @@ async fn update_turtle_list(main_turtle: Arc<RwLock<Option<JsonTurtle>>>, global
         }
     }
 
+    global_turtles_guard
+        .iter()
+        .enumerate()
+        .skip(turtle_list.len())
+        .for_each(|(i, _)| {
+            //Here we remove, as it no longer exists
+            let text_to_remove = match document.query_selector(&format!("[data-id=\"{i}\"]")).expect("Query select error") {
+                Some(val) => val,
+                None => {
+                    log::error!("Please stop fucking trying to hack my app!!!!!!!!");
+                    return;
+                }
+            };
+
+            let parrent = text_to_remove.parent_node().expect("No parrent node?");
+            navbar_div.remove_child(&parrent).expect("Couldn't remove node from navbar"); 
+        });
+
     for (i, turtle) in turtle_list.iter().enumerate() {
         if let Some(global_turtle) = global_turtles_guard.get(i) {
             if global_turtle == turtle {
@@ -105,9 +144,17 @@ async fn update_turtle_list(main_turtle: Arc<RwLock<Option<JsonTurtle>>>, global
 
         let turtle_navbar_div = document.create_element("div").expect("Cannot create div"); 
         turtle_navbar_div.set_class_name("navbar_item_div");
-        turtle_navbar_div.add_event_listener_with_callback("pointerdown", on_click_closure.unchecked_ref()).expect("Cannot set event listener");
-        turtle_navbar_div.set_attribute("data-id", &i.to_string()).expect("Cannot set uuid atribute");
-        navbar_div.append_child(&turtle_navbar_div).unwrap();
+
+        let turtle_navbar_text = document.create_element("p").expect("Cannot create P element");
+        turtle_navbar_text.set_inner_html(&i.to_string());
+        turtle_navbar_text.set_class_name("navbar_item_text");
+        turtle_navbar_text.add_event_listener_with_callback("pointerdown", on_click_closure.unchecked_ref()).expect("Cannot set event listener");
+        turtle_navbar_text.set_attribute("data-id", &i.to_string()).expect("Cannot set uuid atribute");
+        
+        
+        turtle_navbar_div.append_child(&turtle_navbar_text).expect("Cannot push text to child navbar div");
+        //navbar_div.append_child(&turtle_navbar_div).expect("Cannot push child div to navbar");
+        navbar_div.insert_before(&turtle_navbar_div, Some(&refresh_button)).expect("Cannot inseft before refresh_button");
     }
 
     *global_turtles_guard = turtle_list.clone();
