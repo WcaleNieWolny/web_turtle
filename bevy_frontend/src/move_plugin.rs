@@ -3,7 +3,7 @@ use std::time::Duration;
 use bevy::prelude::*;
 use bevy_panorbit_camera::PanOrbitCamera;
 use futures::channel::mpsc::{Sender, Receiver, self};
-use shared::{JsonTurtleRotation, WorldChange, TurtleMoveResponse};
+use shared::{JsonTurtleRotation, WorldChange, TurtleMoveResponse, WorldChangeAction};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{RequestInit, Request, Response};
@@ -117,9 +117,11 @@ fn keybord_input(
 
 fn recive_notification(
     mut gate: ResMut<MovePlugineGate>,
-    main_turtle: Query<&MainTurtle>,
     mut camera_query: Query<&mut PanOrbitCamera, With<MainCamera>>,
-    mut turtle_object_query: Query<&mut Transform, With<MainTurtleObject>>
+    mut turtle_object_query: Query<&mut Transform, With<MainTurtleObject>>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
    match gate.move_reciver.try_next() {
        Ok(val) => {
@@ -137,6 +139,25 @@ fn recive_notification(
                             let mut turtle_transform = turtle_object_query.single_mut();
                             turtle_transform.translation = Vec3::new(start_x + response.x as f32, response.y as f32 + 0.5, start_z + response.z as f32);
                             turtle_transform.rotation = Quat::from_euler(EulerRot::YXZ, rot_y, 0.0, 0.0); 
+
+                            let mut camera = camera_query.single_mut();
+                            camera.focus = Vec3::new(0.5 + response.x as f32, 0.5 + response.y as f32, 0.5 + response.z as f32);
+                        
+                            for change in response.changes {
+                                match change.action {
+                                    WorldChangeAction::New(new) => {
+                                        commands.spawn(PbrBundle {
+                                            mesh: meshes.add(shape::Cube { size: 1.0 }.into()),
+                                            material: materials.add(Color::rgb_u8(new.r, new.g, new.b).into()),
+                                            transform: Transform::from_xyz(0.5 + change.x as f32, change.y as f32 + 1.0, 0.5 + change.z as f32),
+                                            ..default()
+                                        });
+
+                                    },
+                                    WorldChangeAction::Update(_) => {},
+                                    WorldChangeAction::Delete(_) => {},
+                                }
+                            }
                         },
                         None => {}
                     }

@@ -91,7 +91,9 @@ pub struct WorldChange {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct WorldChangeNewBlock {
-    pub color: String
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
 }
 
 //This might change in the future

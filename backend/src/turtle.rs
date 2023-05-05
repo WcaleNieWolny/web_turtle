@@ -227,8 +227,11 @@ impl Turtle {
                         name,
                     };
                     new_db_block.insert(connection)?;
+                    let color = world::block_to_rgb(&block);
                     WorldChangeAction::New(WorldChangeNewBlock {
-                        color,
+                        r: color.0,
+                        g: color.1,
+                        b: color.2,
                     })
                 };
 
