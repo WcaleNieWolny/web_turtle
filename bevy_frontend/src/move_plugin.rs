@@ -118,10 +118,11 @@ fn keybord_input(
 fn recive_notification(
     mut gate: ResMut<MovePlugineGate>,
     mut camera_query: Query<&mut PanOrbitCamera, With<MainCamera>>,
-    mut turtle_object_query: Query<&mut Transform, With<MainTurtleObject>>,
+    mut turtle_object_query: Query<(&mut AnimationPlayer, &Name), With<MainTurtleObject>>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut animations: ResMut<Assets<AnimationClip>>,
 ) {
    match gate.move_reciver.try_next() {
        Ok(val) => {
@@ -136,11 +137,42 @@ fn recive_notification(
                                 JsonTurtleRotation::Left => (0.0, 1.0, std::f32::consts::PI / 2.0),
                             };
 
-                            let mut turtle_transform = turtle_object_query.single_mut();
-                            turtle_transform.translation = Vec3::new(start_x + response.x as f32, response.y as f32 + 0.5, start_z + response.z as f32);
-                            turtle_transform.rotation = Quat::from_euler(EulerRot::YXZ, rot_y, 0.0, 0.0); 
+                            let (mut animation_player, name) = turtle_object_query.single_mut();
+                            let mut animation = AnimationClip::default();
+
+                            animation.add_curve_to_path(
+                                EntityPath { parts: vec![name.clone()] },
+                                VariableCurve {
+                                    keyframe_timestamps: vec![1.0],
+                                    keyframes: Keyframes::Translation(
+                                        vec![
+                                            Vec3::new(start_x + response.x as f32, response.y as f32 + 0.5, start_z + response.z as f32),
+                                        ]
+                                    )
+                                }
+                            );
+                            animation.add_curve_to_path(
+                                EntityPath { parts: vec![name.clone()] },
+                                VariableCurve {
+                                    keyframe_timestamps: vec![1.0],
+                                    keyframes: Keyframes::Rotation(
+                                        vec![
+                                            Quat::from_euler(EulerRot::YXZ, rot_y, 0.0, 0.0)
+                                        ]
+                                    )
+                                }
+                            );
+                            
+                            animation_player.start_with_transition(animations.add(animation), Duration::from_millis(500));
+                
+
+                            //turtle_transform.translation = Vec3::new(start_x + response.x as f32, response.y as f32 + 0.5, start_z + response.z as f32);
+                            //turtle_transform.rotation = Quat::from_euler(EulerRot::YXZ, rot_y, 0.0, 0.0); 
+
+
 
                             let mut camera = camera_query.single_mut();
+                            camera.force_update = true;
                             camera.focus = Vec3::new(0.5 + response.x as f32, 0.5 + response.y as f32, 0.5 + response.z as f32);
                         
                             for change in response.changes {

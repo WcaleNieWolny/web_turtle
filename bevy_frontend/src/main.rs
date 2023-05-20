@@ -79,7 +79,7 @@ fn setup(
             0.0,
         )), 
         ..default()
-    }, MainTurtleObject));
+    }, MainTurtleObject, AnimationPlayer::default(), Name::new("turtle_model")));
 
     // camera
     commands.spawn((
