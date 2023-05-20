@@ -75,6 +75,21 @@ pub struct TurtleBlock {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct WorldBlock {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TurtleWorld {
+    pub blocks: Vec<WorldBlock>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub enum WorldChangeAction {
     New(WorldChangeNewBlock),
     Update(WorldChangeUpdateBlock),

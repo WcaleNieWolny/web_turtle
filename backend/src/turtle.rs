@@ -52,6 +52,13 @@ pub enum TurtleWorldScanError {
     InvalidTurtle
 }
 
+#[derive(Error, Debug)]
+pub enum TurtleWorldShowError {
+    #[error("Database error")]
+    DatabaseError(#[from] diesel::result::Error),
+    #[error("Turtle does not contain ID")]
+    InvalidTurtleError
+}
 
 pub struct TurtleAsyncRequest {
     pub request: String,
@@ -241,5 +248,11 @@ impl Turtle {
             .collect::<Result<Vec<WorldChange>, TurtleWorldScanError>>()?;       
 
         Ok(changes)
+    }
+
+    pub async fn show_world(&mut self, connection: &mut Connection) -> Result<Vec<BlockData>, TurtleWorldShowError> {
+        let id = self.turtle_data.id.ok_or(TurtleWorldShowError::InvalidTurtleError)?;
+
+        Ok(BlockData::list_by_turtle_id(connection, id)?)
     }
 }

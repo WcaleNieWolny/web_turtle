@@ -129,4 +129,8 @@ impl BlockData {
             .execute(connection)?;
         Ok(())
     }
+
+    pub fn list_by_turtle_id(connection: &mut SqliteConnection, id: i32) -> Result<Vec<BlockData>, diesel::result::Error> {
+        worlds_data::table.filter(worlds_data::turtle_id.eq(id)).load(connection)
+    }
 }

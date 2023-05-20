@@ -6,14 +6,21 @@ use bevy::prelude::*;
 use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{RequestInit, Request, Response, PointerEvent, HtmlElement, MouseEvent};
 
+use crate::SelectTurtleEvent;
+
 static mut MAIN_TURTLE: Option<Arc<RwLock<Option<JsonTurtle>>>> = None;
 static mut TURTLE_VEC: Option<Arc<RwLock<Vec<JsonTurtle>>>> = None;
 static mut ON_CLICK_CLOSURE: Option<JsValue> = None;
 
-#[derive(Component)]
+#[derive(Resource)]
 pub struct MainTurtle(Arc<RwLock<Option<JsonTurtle>>>);
 
 pub struct UiPlugin;
+
+#[derive(Resource)]
+struct TurtleEventChangeState { 
+    previous_turtle: Option<JsonTurtle> 
+}
 
 impl Deref for MainTurtle {
     type Target = Arc<RwLock<Option<JsonTurtle>>>;
@@ -96,7 +103,7 @@ fn setup_ui_system(mut commands: Commands) {
     refresh_button_closure.forget();
 
     //Register main turtle with bevy!
-    commands.spawn(MainTurtle(main_turtle.clone()));
+    commands.insert_resource(MainTurtle(main_turtle.clone()));
 
     //This spawn thing is expensive, but whatevet
     spawn_local(async move {
@@ -190,8 +197,43 @@ async fn get_turtles_list() -> Vec<JsonTurtle> {
     return serde_wasm_bindgen::from_value(json).expect("Json serde error");
 }
 
+fn send_turtle_change_event(
+    main_turtle: Res<MainTurtle>,
+    mut previous_turtle: ResMut<TurtleEventChangeState>,
+    mut ev_change: EventWriter<SelectTurtleEvent>,
+) {
+    let previous_turtle = &mut previous_turtle.previous_turtle;
+    let guard = main_turtle.read().expect("Cannot lock main turtle, should never happen!");
+    match &*guard {
+        Some(val) => {
+            match previous_turtle {
+                Some(previous_turtle) => {
+                    if previous_turtle.uuid != val.uuid {
+                        ev_change.send(SelectTurtleEvent(Some(val.clone())));
+                        *previous_turtle = val.clone();
+                    }
+                },
+                None => {
+                    //We have a new turtle!
+                    ev_change.send(SelectTurtleEvent(Some(val.clone())));
+                    *previous_turtle = Some(val.clone());
+                }
+            }
+        },
+        None => {
+            if previous_turtle.is_some() {
+                ev_change.send(SelectTurtleEvent(None));
+                *previous_turtle = None;
+            }
+        }
+    };
+    
+}
+
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(setup_ui_system);
+        app.add_startup_system(setup_ui_system)
+            .insert_resource(TurtleEventChangeState { previous_turtle: None })
+            .add_system(send_turtle_change_event);
     }
 }

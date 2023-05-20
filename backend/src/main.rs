@@ -7,7 +7,7 @@ use std::{net::SocketAddr, sync::Arc, collections::HashMap, time::Duration, erro
 use axum::{Router, extract::{WebSocketUpgrade, ConnectInfo, ws::{WebSocket, Message}, State, Path}, response::IntoResponse, routing::{get, put}, http::StatusCode, Json};
 use database::{SqlitePool, TurtleData, Connection, DatabaseActionError};
 use schema::MoveDirection;
-use shared::{JsonTurtle, TurtleMoveResponse};
+use shared::{JsonTurtle, TurtleMoveResponse, TurtleWorld, WorldBlock};
 use tokio::{sync::{Mutex, mpsc}, time::timeout};
 use tower_http::{trace::{TraceLayer, DefaultMakeSpan}, cors::{CorsLayer, Any}};
 use tracing::{error, warn, debug};
@@ -45,6 +45,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .route("/turtle/:id/command/", put(command_turtle))
         .route("/turtle/:id/move/", put(move_turtle))
         .route("/turtle/list/", get(list_turtles))
+        .route("/turtle/:id/world/", get(show_world))
         // logging so we can see whats going on
         .layer(
             TraceLayer::new_for_http()
@@ -152,6 +153,39 @@ async fn list_turtles(
             }
         })
         .collect());
+}
+
+async fn show_world(
+    State(turtles): State<TurtlesState>,
+    Path(uuid): Path<String>,
+) -> Result<impl IntoResponse, (StatusCode, impl IntoResponse)> {
+    let mut guard = turtles.turtles.lock().await;
+
+    let uuid = Uuid::parse_str(&uuid).or(Err((StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST.to_string())))?;
+    let turtle = match guard.get_mut(&uuid) {
+        Some(v) => v,
+        None => return Err((StatusCode::NOT_FOUND, StatusCode::NOT_FOUND.to_string())) 
+    };
+
+    let conn: Result<Connection, DatabaseActionError> = turtles.pool.clone().try_into();
+    let mut conn = conn.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Connection pool empty".to_string()))?;
+
+    let blocks = turtle.show_world(&mut conn).await.map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    let world = TurtleWorld {
+        blocks: blocks.iter().map(|block|  {
+            let (r, g, b) = world::block_to_rgb(&block.name);
+            WorldBlock {
+                r,
+                g,
+                b,
+                x: block.x,
+                y: block.y,
+                z: block.z,
+            }
+        }).collect() 
+    };
+
+    Ok(Json(world))
 }
 
 async fn handle_socket(mut socket: WebSocket, _addr: SocketAddr, turtles: TurtlesState)  {

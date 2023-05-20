@@ -11,6 +11,7 @@ use bevy::prelude::*;
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use move_plugin::MovePlugin;
 use resize_plugin::ResizePlugin;
+use shared::JsonTurtle;
 use ui_plugin::UiPlugin;
 use wasm_bindgen_futures::spawn_local;
 
@@ -19,6 +20,9 @@ pub struct MainCamera;
 
 #[derive(Component)]
 pub struct MainTurtleObject;
+
+#[derive(Debug)]
+pub struct SelectTurtleEvent(Option<JsonTurtle>);
 
 fn main() {
     // When building for WASM, print panics to the browser console
@@ -44,6 +48,7 @@ async fn async_main() {
                 })
         )
         .insert_resource(Msaa::Sample4)
+        .add_event::<SelectTurtleEvent>()
         .add_plugin(ResizePlugin)
         .add_plugin(UiPlugin)
         .add_plugin(PanOrbitCameraPlugin)

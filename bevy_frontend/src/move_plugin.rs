@@ -8,7 +8,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{RequestInit, Request, Response};
 
-use crate::{ui_plugin::MainTurtle, MainTurtleObject, MainCamera};
+use crate::{ui_plugin::MainTurtle, MainTurtleObject, MainCamera, SelectTurtleEvent};
 
 pub struct MovePlugin;
 
@@ -33,7 +33,8 @@ impl Plugin for MovePlugin {
         })
         .add_system(control_timer)
         .add_system(keybord_input)
-        .add_system(recive_notification);
+        .add_system(recive_notification)
+        .add_system(on_turtle_change);
     }
 }
 
@@ -49,7 +50,7 @@ fn control_timer(
 
 fn keybord_input(
     keys: Res<Input<KeyCode>>,
-    main_turtle: Query<&MainTurtle>,
+    main_turtle: Res<MainTurtle>,
     mut gate: ResMut<MovePlugineGate>
 ) {
     if !gate.allow_move || gate.handle_request {
@@ -68,7 +69,7 @@ fn keybord_input(
         return
     };
 
-    let guard = main_turtle.single().read().expect("Cannot lock main turtle, should never happen!");
+    let guard = main_turtle.read().expect("Cannot lock main turtle, should never happen!");
     let main_turtle = match &*guard {
         Some(val) => val,
         None => return
@@ -110,7 +111,6 @@ fn keybord_input(
 
         let json = JsFuture::from(resp.json().expect("Cannot get json")).await.expect("Cannot get future from JS");
         let result: TurtleMoveResponse = serde_wasm_bindgen::from_value(json).expect("Json serde error");
-        log::warn!("{result:?}");
         tx.try_send(Some(result)).expect("Cannot notify bevy move system (Ok)");
     })
 }
@@ -201,4 +201,12 @@ fn recive_notification(
        }
        Err(_) => return,
    };
+}
+
+fn on_turtle_change(
+    mut ev_change: EventReader<SelectTurtleEvent>
+) {
+    for ev in ev_change.iter() {
+       log::warn!("{:?}", ev); 
+    }
 }
