@@ -123,7 +123,7 @@ impl Turtle {
             response: tx,
         };
 
-        match timeout(Duration::from_secs(3), self.request_queue.send(request)).await {
+        match timeout(Duration::from_secs(10), self.request_queue.send(request)).await {
             Ok(val) => val.or(Err(TurtleRequestError::RequestSendError))?,
             Err(_) => return Err(TurtleRequestError::TimeOut),
         }

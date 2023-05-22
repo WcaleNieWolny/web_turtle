@@ -8,7 +8,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{RequestInit, Request, Response};
 
-use crate::{ui_plugin::MainTurtle, MainTurtleObject, MainCamera, SelectTurtleEvent};
+use crate::{ui_plugin::MainTurtle, MainTurtleObject, MainCamera, SelectTurtleEvent, WorldChangeEvent};
 
 pub struct MovePlugin;
 
@@ -119,10 +119,8 @@ fn recive_notification(
     mut gate: ResMut<MovePlugineGate>,
     mut camera_query: Query<&mut PanOrbitCamera, With<MainCamera>>,
     mut turtle_object_query: Query<(&mut AnimationPlayer, &Name), With<MainTurtleObject>>,
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     mut animations: ResMut<Assets<AnimationClip>>,
+    mut world_change_writer: EventWriter<WorldChangeEvent>
 ) {
    match gate.move_reciver.try_next() {
        Ok(val) => {
@@ -130,12 +128,7 @@ fn recive_notification(
                 Some(val) => {
                     match val {
                         Some(response) => {
-                            let (start_x, start_z, rot_y): (f32, f32, f32) = match response.rotation {
-                                JsonTurtleRotation::Forward => (0.0, 0.0, 0.0),
-                                JsonTurtleRotation::Backward => (1.0, 1.0, std::f32::consts::PI),
-                                JsonTurtleRotation::Right => (1.0, 0.0, std::f32::consts::PI * 1.5),
-                                JsonTurtleRotation::Left => (0.0, 1.0, std::f32::consts::PI / 2.0),
-                            };
+                            let (start_x, start_z, rot_y) = rotation_to_start_loc(&response.rotation); 
 
                             let (mut animation_player, name) = turtle_object_query.single_mut();
                             let mut animation = AnimationClip::default();
@@ -165,30 +158,15 @@ fn recive_notification(
                             
                             animation_player.start_with_transition(animations.add(animation), Duration::from_millis(500));
                 
-
                             //turtle_transform.translation = Vec3::new(start_x + response.x as f32, response.y as f32 + 0.5, start_z + response.z as f32);
                             //turtle_transform.rotation = Quat::from_euler(EulerRot::YXZ, rot_y, 0.0, 0.0); 
-
-
 
                             let mut camera = camera_query.single_mut();
                             camera.force_update = true;
                             camera.focus = Vec3::new(0.5 + response.x as f32, 0.5 + response.y as f32, 0.5 + response.z as f32);
                         
                             for change in response.changes {
-                                match change.action {
-                                    WorldChangeAction::New(new) => {
-                                        commands.spawn(PbrBundle {
-                                            mesh: meshes.add(shape::Cube { size: 1.0 }.into()),
-                                            material: materials.add(Color::rgb_u8(new.r, new.g, new.b).into()),
-                                            transform: Transform::from_xyz(0.5 + change.x as f32, change.y as f32 + 1.0, 0.5 + change.z as f32),
-                                            ..default()
-                                        });
-
-                                    },
-                                    WorldChangeAction::Update(_) => {},
-                                    WorldChangeAction::Delete(_) => {},
-                                }
+                                world_change_writer.send(WorldChangeEvent(change));
                             }
                         },
                         None => {}
@@ -204,9 +182,32 @@ fn recive_notification(
 }
 
 fn on_turtle_change(
-    mut ev_change: EventReader<SelectTurtleEvent>
+    mut ev_change: EventReader<SelectTurtleEvent>,
+    mut camera_query: Query<&mut PanOrbitCamera, With<MainCamera>>,
+    mut turtle_object_query: Query<&mut Transform, With<MainTurtleObject>>,
 ) {
     for ev in ev_change.iter() {
        log::warn!("{:?}", ev); 
+
+        if let Some(turtle) = &ev.0 {
+            let (start_x, start_z, rot_y) = rotation_to_start_loc(&turtle.rotation);
+
+                let mut turtle_transform = turtle_object_query.single_mut();
+                turtle_transform.translation = Vec3::new(start_x + turtle.x as f32, turtle.y as f32 + 0.5, start_z + turtle.z as f32);
+                turtle_transform.rotation = Quat::from_euler(EulerRot::YXZ, rot_y, 0.0, 0.0); 
+
+                let mut camera = camera_query.single_mut();
+                camera.focus = Vec3::new(0.5 + turtle.x as f32, 0.5 + turtle.y as f32, 0.5 + turtle.z as f32);
+                camera.force_update = true;
+        } 
     }
+}
+
+fn rotation_to_start_loc(rot: &JsonTurtleRotation) -> (f32, f32, f32) {
+    return match rot {
+        JsonTurtleRotation::Forward => (0.0, 0.0, 0.0),
+        JsonTurtleRotation::Backward => (1.0, 1.0, std::f32::consts::PI),
+        JsonTurtleRotation::Right => (1.0, 0.0, std::f32::consts::PI * 1.5),
+        JsonTurtleRotation::Left => (0.0, 1.0, std::f32::consts::PI / 2.0),
+    };
 }

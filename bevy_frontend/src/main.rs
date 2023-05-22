@@ -1,6 +1,7 @@
 mod resize_plugin;
 mod ui_plugin;
 mod move_plugin;
+mod world_plugin;
 
 extern crate console_error_panic_hook;
 
@@ -11,9 +12,10 @@ use bevy::prelude::*;
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use move_plugin::MovePlugin;
 use resize_plugin::ResizePlugin;
-use shared::JsonTurtle;
+use shared::{JsonTurtle, WorldChange};
 use ui_plugin::UiPlugin;
 use wasm_bindgen_futures::spawn_local;
+use world_plugin::WorldPlugin;
 
 #[derive(Component)]
 pub struct MainCamera;
@@ -23,6 +25,8 @@ pub struct MainTurtleObject;
 
 #[derive(Debug)]
 pub struct SelectTurtleEvent(Option<JsonTurtle>);
+
+pub struct WorldChangeEvent(WorldChange);
 
 fn main() {
     // When building for WASM, print panics to the browser console
@@ -49,10 +53,12 @@ async fn async_main() {
         )
         .insert_resource(Msaa::Sample4)
         .add_event::<SelectTurtleEvent>()
+        .add_event::<WorldChangeEvent>()
         .add_plugin(ResizePlugin)
         .add_plugin(UiPlugin)
         .add_plugin(PanOrbitCameraPlugin)
         .add_plugin(MovePlugin)
+        .add_plugin(WorldPlugin)
         .add_startup_system(setup)
         .run();
 }
@@ -61,18 +67,8 @@ async fn async_main() {
 /// set up a simple 3D scene
 fn setup(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     assets: Res<AssetServer>,
 ) {
-    // plane
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(shape::Cube { size: 1.0 }.into()),
-        material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
-        transform: Transform::from_xyz(0.5, 0.0, 0.5),
-        ..default()
-    });
-
     let gltf: Handle<Scene> = assets.load("/assets/turtle_model.glb#Scene0");
     commands.spawn((SceneBundle {
         scene: gltf,
