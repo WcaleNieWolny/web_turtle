@@ -573,6 +573,7 @@ name = "bevy_frontend"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bevy_mod_raycast",
  "bevy_panorbit_camera",
  "console_error_panic_hook",
  "console_log",
@@ -739,6 +740,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39106bc2ee21fce9496d2e15e0ba7925dff63e3eae10f7c1fc0094b56ad9f2bb"
 dependencies = [
  "glam",
+]
+
+[[package]]
+name = "bevy_mod_raycast"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc98a75743120396c8f3e3b47bfeb7f3d39248c46a625972005e51ca4d110a2a"
+dependencies = [
+ "bevy",
 ]
 
 [[package]]

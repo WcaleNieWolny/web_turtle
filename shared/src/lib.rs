@@ -25,7 +25,7 @@ impl JsonTurtleRotation {
     /// A tuple (x, y, z)
     /// # Safety 
     /// NEVER CALL THIS FUNCTION WITH MoveDirection::Left OR MoveDirection:Right
-    pub fn to_turtle_move_diff(&self, turtle_rotation: JsonTurtleRotation) -> (i32, i32, i32) {
+    pub fn to_turtle_move_diff(&self, turtle_rotation: &JsonTurtleRotation) -> (i32, i32, i32) {
         match turtle_rotation {
             JsonTurtleRotation::Right => {
                 match self {
@@ -56,6 +56,46 @@ impl JsonTurtleRotation {
                 }
             },
         }
+    }
+
+    fn from_i32(number: i32) -> Self {
+        match number {
+            0 => Self::Forward,
+            1 => Self::Right,
+            2 => Self::Backward,
+            3 => Self::Left,
+            _ => panic!("Invalid i32 number to MoveDirection, this should NEVER happen")
+        }
+    }
+    fn to_i32(&self) -> i32 {
+        match &self {
+            Self::Forward => 0,
+            Self::Right => 1,
+            Self::Backward => 2,
+            Self::Left => 3,
+        }
+    }
+
+    pub fn rotate_self(&mut self, rotation: &JsonTurtleRotation) {
+        let mut enum_number = self.to_i32();
+        match rotation {
+            JsonTurtleRotation::Right => {
+                if enum_number == 3 {
+                    enum_number = 0
+                } else {
+                    enum_number += 1
+                }
+            },
+            JsonTurtleRotation::Left => {
+                if enum_number == 0 {
+                    enum_number = 3
+                } else {
+                    enum_number -= 1
+                }
+            },
+            _ => panic!("Invalid rotation")
+        };
+        *self = Self::from_i32(enum_number)
     }
 }
 

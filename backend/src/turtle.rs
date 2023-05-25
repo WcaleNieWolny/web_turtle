@@ -72,30 +72,12 @@ impl ToString for MoveDirection {
 }
 
 impl MoveDirection {
-    pub fn from_i32(number: i32) -> Self {
-        match number {
-            0 => Self::Forward,
-            1 => Self::Right,
-            2 => Self::Backward,
-            3 => Self::Left,
-            _ => panic!("Invalid i32 number to MoveDirection, this should NEVER happen")
-        }
-    }
-    pub fn to_i32(&self) -> i32 {
-        match &self {
-            Self::Forward => 0,
-            Self::Right => 1,
-            Self::Backward => 2,
-            Self::Left => 3,
-        }
-    }
-
     /// # Returns
     /// A tuple (x, y, z)
     /// # Safety 
     /// NEVER CALL THIS FUNCTION WITH MoveDirection::Left OR MoveDirection:Right
     fn to_turtle_move_diff(&self, turtle: &Turtle) -> (i32, i32, i32) {
-        return self.to_json_enum().to_turtle_move_diff(turtle.turtle_data.rotation.to_json_enum())
+        return self.to_json_enum().to_turtle_move_diff(&turtle.turtle_data.rotation.to_json_enum())
     }
 
     pub fn to_json_enum(&self) -> JsonTurtleRotation {
@@ -104,6 +86,17 @@ impl MoveDirection {
             MoveDirection::Right => JsonTurtleRotation::Right,
             MoveDirection::Backward => JsonTurtleRotation::Backward,
             MoveDirection::Left => JsonTurtleRotation::Left,
+        }
+    }
+}
+
+impl From::<JsonTurtleRotation> for MoveDirection {
+    fn from(value: JsonTurtleRotation) -> Self {
+        return match value {
+            JsonTurtleRotation::Forward => MoveDirection::Forward, 
+            JsonTurtleRotation::Right => MoveDirection::Right,
+            JsonTurtleRotation::Backward => MoveDirection::Backward,
+            JsonTurtleRotation::Left => MoveDirection::Left,
         }
     }
 }
@@ -149,22 +142,14 @@ impl Turtle {
             "true" => {
                 match direction {
                     MoveDirection::Right => {
-                        let mut enum_number = self.turtle_data.rotation.to_i32();
-                        if enum_number == 3 {
-                            enum_number = 0
-                        } else {
-                            enum_number += 1
-                        }
-                        self.turtle_data.rotation = MoveDirection::from_i32(enum_number)
+                        let mut rotation = self.turtle_data.rotation.to_json_enum();
+                        rotation.rotate_self(&JsonTurtleRotation::Right);
+                        self.turtle_data.rotation = rotation.into(); 
                     }
                     MoveDirection::Left => {
-                        let mut enum_number = self.turtle_data.rotation.to_i32();
-                        if enum_number == 0 {
-                            enum_number = 3
-                        } else {
-                            enum_number -= 1
-                        }
-                        self.turtle_data.rotation = MoveDirection::from_i32(enum_number)
+                        let mut rotation = self.turtle_data.rotation.to_json_enum();
+                        rotation.rotate_self(&JsonTurtleRotation::Left);
+                        self.turtle_data.rotation = rotation.into(); 
                     },
                     direction => {
                         let (x_diff, y_diff, z_diff) = direction.to_turtle_move_diff(&self);

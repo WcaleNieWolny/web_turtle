@@ -5,7 +5,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::{Request, RequestInit, Response};
 
-use crate::{SelectTurtleEvent, WorldChangeEvent, MyRaycastSet};
+use crate::{SelectTurtleEvent, WorldChangeEvent, BlockRaycastSet};
 
 pub struct WorldPlugin;
 
@@ -58,7 +58,7 @@ fn recive_all_new_world(
                                         ),
                                         ..default()
                                     },
-                                    bevy_mod_raycast::RaycastMesh::<MyRaycastSet>::default()
+                                    bevy_mod_raycast::RaycastMesh::<BlockRaycastSet>::default()
                                     
                                 ));
                             }
@@ -161,7 +161,7 @@ fn block_change_detect(
                         ..default()
                     },
                     WorldBlock,
-                    bevy_mod_raycast::RaycastMesh::<MyRaycastSet>::default()
+                    bevy_mod_raycast::RaycastMesh::<BlockRaycastSet>::default()
                 ));
             }
             shared::WorldChangeAction::Update(update) => {

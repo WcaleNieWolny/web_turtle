@@ -71,11 +71,12 @@ fn keybord_input(
     let guard = main_turtle
         .read()
         .expect("Cannot lock main turtle, should never happen!");
-    let main_turtle = match &*guard {
+    let main_turtle_ref = match &*guard {
         Some(val) => val,
         None => return,
     };
-    let uuid = main_turtle.uuid.clone();
+
+    let uuid = main_turtle_ref.uuid.clone();
     drop(guard);
 
     gate.allow_move = false;
@@ -83,6 +84,7 @@ fn keybord_input(
 
     let mut tx = gate.move_sender.clone();
 
+    let main_turtle = main_turtle.clone();
     spawn_local(async move {
         let string_direction = direction.to_string();
 
@@ -124,6 +126,26 @@ fn keybord_input(
             serde_wasm_bindgen::from_value(json).expect("Json serde error");
         tx.try_send(Some(result))
             .expect("Cannot notify bevy move system (Ok)");
+
+        main_turtle
+            .write()
+            .expect("Cannot lock main turtle, should never happen!")
+            .as_mut()
+            .and_then(|main_turtle| {
+                match direction {
+                    JsonTurtleRotation::Right | JsonTurtleRotation::Left => {
+                        main_turtle.rotation.rotate_self(&direction);
+                    },
+                    JsonTurtleRotation::Backward | JsonTurtleRotation::Forward => {
+                        let (x_change, y_change, z_change) = direction.to_turtle_move_diff(&main_turtle.rotation);
+                        main_turtle.x += x_change;
+                        main_turtle.y += y_change;
+                        main_turtle.z += z_change;
+                    },
+                };
+                log::error!("JSNO T: {main_turtle:?}");
+                None::<()>
+            });
     })
 }
 
