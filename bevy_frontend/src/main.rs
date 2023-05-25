@@ -10,12 +10,19 @@ use std::panic;
 
 use bevy::prelude::*;
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
+use bevy_mod_raycast::{
+    DefaultPluginState, DefaultRaycastingPlugin, RaycastMesh, RaycastMethod, RaycastSource,
+    RaycastSystem,
+};
 use move_plugin::MovePlugin;
 use resize_plugin::ResizePlugin;
 use shared::{JsonTurtle, WorldChange};
 use ui_plugin::UiPlugin;
 use wasm_bindgen_futures::spawn_local;
 use world_plugin::WorldPlugin;
+
+#[derive(Reflect, Clone, Component)]
+pub struct MyRaycastSet;
 
 #[derive(Component)]
 pub struct MainCamera;
@@ -54,13 +61,49 @@ async fn async_main() {
         .add_plugin(PanOrbitCameraPlugin)
         .add_plugin(MovePlugin)
         .add_plugin(WorldPlugin)
+        .add_plugin(DefaultRaycastingPlugin::<MyRaycastSet>::default())
         .add_startup_system(setup)
+        .add_system(
+            update_raycast_with_cursor.in_base_set(CoreSet::First).before(RaycastSystem::BuildRays::<MyRaycastSet>)
+        )
+        .add_system(shit.after(update_raycast_with_cursor))
         .run();
+}
+
+fn update_raycast_with_cursor(
+    mut cursor: EventReader<CursorMoved>,
+    mut query: Query<&mut RaycastSource<MyRaycastSet>>,
+) {
+    // Grab the most recent cursor event if it exists:
+    let cursor_position = match cursor.iter().last() {
+        Some(cursor_moved) => cursor_moved.position,
+        None => return,
+    };
+
+    for mut pick_source in &mut query {
+        pick_source.cast_method = RaycastMethod::Screenspace(cursor_position);
+    }
+}
+
+fn shit(
+    keyboard: Res<Input<KeyCode>>,
+    mut query: Query<&mut RaycastSource<MyRaycastSet>>,
+) {
+    if keyboard.just_pressed(KeyCode::Space) {
+        log::warn!("Click!");
+        for entity in &query {
+            if let Some((entity, _)) = entity.get_nearest_intersection() {
+                log::warn!("ID: {}", entity.index());
+            }
+        }   
+    }
 }
 
 //https://bevyengine.org/examples/3d/3d-scene/
 /// set up a simple 3D scene
 fn setup(mut commands: Commands, assets: Res<AssetServer>) {
+
+    commands.insert_resource(DefaultPluginState::<MyRaycastSet>::default().with_debug_cursor());
     let gltf: Handle<Scene> = assets.load("/assets/turtle_model.glb#Scene0");
     commands.spawn((
         SceneBundle {
@@ -90,7 +133,8 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>) {
             ..default()
         },
         MainCamera,
-    ));
+    ))
+    .insert(RaycastSource::<MyRaycastSet>::new());
 
     // light
     commands.insert_resource(AmbientLight {
