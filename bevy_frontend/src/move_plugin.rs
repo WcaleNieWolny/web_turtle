@@ -143,7 +143,6 @@ fn keybord_input(
                         main_turtle.z += z_change;
                     },
                 };
-                log::error!("JSNO T: {main_turtle:?}");
                 None::<()>
             });
     })

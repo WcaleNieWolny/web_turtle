@@ -58,6 +58,7 @@ fn recive_all_new_world(
                                         ),
                                         ..default()
                                     },
+                                    WorldBlock,
                                     bevy_mod_raycast::RaycastMesh::<BlockRaycastSet>::default()
                                     
                                 ));
@@ -84,7 +85,9 @@ fn turtle_change_listener(
     for event in &mut select_turtle_reader {
         //Clean the world
         for entity in world_blocks.iter() {
-            commands.entity(entity).remove::<WorldBlock>();
+            //what the fuck?
+            log::warn!("aaa");
+            commands.entity(entity).despawn();
         }
 
         match &event.0 {
