@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
@@ -17,6 +19,20 @@ impl ToString for JsonTurtleRotation {
             JsonTurtleRotation::Left => "left".to_string(),
             JsonTurtleRotation::Right => "right".to_string(),
         }
+    }
+}
+
+impl FromStr for JsonTurtleRotation {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        return Ok(match s {
+            "forward" => JsonTurtleRotation::Forward,
+            "backward" => JsonTurtleRotation::Backward,
+            "left" => JsonTurtleRotation::Left,
+            "right" => JsonTurtleRotation::Right,
+            _ => return Err(())
+        })
     }
 }
 

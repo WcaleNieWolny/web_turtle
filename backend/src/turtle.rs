@@ -11,6 +11,7 @@ use crate::{database::{TurtleData, DatabaseActionError, Connection, BlockData}, 
 static INSPECT_DOWN_PAYLOAD: &str = "local has_block, data = turtle.inspectDown() return textutils.serialiseJSON(data)";
 static INSPECT_FORWARD_PAYLOAD: &str = "local has_block, data = turtle.inspect() return textutils.serialiseJSON(data)";
 static INSPECT_UP_PAYLOAD: &str = "local has_block, data = turtle.inspectUp() return textutils.serialiseJSON(data)";
+static DESTROY_BLOCK_FRONT: &str = "return turtle.dig()";
 
 #[derive(Error, Debug)]
 pub enum TurtleRequestError {
@@ -60,6 +61,20 @@ pub enum TurtleWorldShowError {
     InvalidTurtleError
 }
 
+#[derive(Error, Debug)] 
+pub enum TurtleDestroyBlockError{
+    #[error("Database error")]
+    DatabaseError(#[from] DatabaseActionError),
+    #[error("Request error")]
+    RequestError(#[from] TurtleRequestError),
+    #[error("Unexpected response ({0})")]
+    UnexpectedResponse(String),
+    #[error("Cannot break block")]
+    CannotBreak,
+    #[error("Not yet implemented")]
+    NotImplemented
+}
+
 pub struct TurtleAsyncRequest {
     pub request: String,
     pub response: oneshot::Sender<Result<String, TurtleRequestError>>
@@ -80,13 +95,9 @@ impl MoveDirection {
         return self.to_json_enum().to_turtle_move_diff(&turtle.turtle_data.rotation.to_json_enum())
     }
 
+    /// Stub for .into()
     pub fn to_json_enum(&self) -> JsonTurtleRotation {
-        match self {
-            MoveDirection::Forward => JsonTurtleRotation::Forward,
-            MoveDirection::Right => JsonTurtleRotation::Right,
-            MoveDirection::Backward => JsonTurtleRotation::Backward,
-            MoveDirection::Left => JsonTurtleRotation::Left,
-        }
+        self.clone().into()
     }
 }
 
@@ -97,6 +108,17 @@ impl From::<JsonTurtleRotation> for MoveDirection {
             JsonTurtleRotation::Right => MoveDirection::Right,
             JsonTurtleRotation::Backward => MoveDirection::Backward,
             JsonTurtleRotation::Left => MoveDirection::Left,
+        }
+    }
+}
+
+impl Into::<JsonTurtleRotation> for MoveDirection {
+    fn into(self) -> JsonTurtleRotation {
+        match self {
+            MoveDirection::Forward => JsonTurtleRotation::Forward,
+            MoveDirection::Right => JsonTurtleRotation::Right,
+            MoveDirection::Backward => JsonTurtleRotation::Backward,
+            MoveDirection::Left => JsonTurtleRotation::Left,
         }
     }
 }
@@ -141,15 +163,10 @@ impl Turtle {
         match result.as_str() {
             "true" => {
                 match direction {
-                    MoveDirection::Right => {
-                        let mut rotation = self.turtle_data.rotation.to_json_enum();
-                        rotation.rotate_self(&JsonTurtleRotation::Right);
-                        self.turtle_data.rotation = rotation.into(); 
-                    }
-                    MoveDirection::Left => {
-                        let mut rotation = self.turtle_data.rotation.to_json_enum();
-                        rotation.rotate_self(&JsonTurtleRotation::Left);
-                        self.turtle_data.rotation = rotation.into(); 
+                    MoveDirection::Right | MoveDirection::Left => {
+                        let mut rot = self.turtle_data.rotation.to_json_enum();
+                        rot.rotate_self(&direction.to_json_enum());
+                        self.turtle_data.rotation = rot.into(); 
                     },
                     direction => {
                         let (x_diff, y_diff, z_diff) = direction.to_turtle_move_diff(&self);
@@ -239,5 +256,26 @@ impl Turtle {
         let id = self.turtle_data.id.ok_or(TurtleWorldShowError::InvalidTurtleError)?;
 
         Ok(BlockData::list_by_turtle_id(connection, id)?)
+    }
+
+    pub async fn destroy_block(&mut self, connection: &mut Connection, side: JsonTurtleRotation) -> Result<(), TurtleDestroyBlockError> {
+        let payload = match side {
+            JsonTurtleRotation::Forward => DESTROY_BLOCK_FRONT,
+            _ => return Err(TurtleDestroyBlockError::NotImplemented)
+        };
+
+        let response = self.command(payload).await?;
+
+        match response.as_str() {
+            "true" => {
+                let (x_diff, y_dif, z_diff) = side.to_turtle_move_diff(&self.turtle_data.rotation.into());
+                let (x, y, z) = (self.turtle_data.x + x_diff, self.turtle_data.y + y_dif, self.turtle_data.z + z_diff);
+
+                BlockData::delete_by_xyz(connection, x, y, z)?;
+                return Ok(());
+            }
+            "false" => return Err(TurtleDestroyBlockError::CannotBreak),
+            _ => return Err(TurtleDestroyBlockError::UnexpectedResponse(response))
+        }
     }
 }
