@@ -61,7 +61,8 @@ async fn async_main() {
         .add_plugin(MovePlugin)
         .add_plugin(WorldPlugin)
         .add_plugin(BlockDestroyPlugin)
-        .add_plugin(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
+        //.add_plugin(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
+        //.add_plugin(bevy::diagnostic::LogDiagnosticsPlugin::default())
         .add_startup_system(setup)
         .run();
 }

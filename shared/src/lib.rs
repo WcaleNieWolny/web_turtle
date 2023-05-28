@@ -184,3 +184,8 @@ pub struct TurtleMoveResponse {
     pub rotation: JsonTurtleRotation,
     pub changes: Vec<WorldChange>
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DestroyBlockResponse {
+    pub change: Option<WorldChange>
+}

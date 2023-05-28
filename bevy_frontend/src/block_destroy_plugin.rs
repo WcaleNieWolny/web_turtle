@@ -3,19 +3,20 @@ use bevy_mod_raycast::{
     DefaultRaycastingPlugin, RaycastMethod, RaycastSource,
     RaycastSystem,
 };
-use serde::Deserialize;
-use shared::JsonTurtleRotation;
+use futures::channel::mpsc::{Sender, Receiver, channel};
+use shared::{JsonTurtleRotation, DestroyBlockResponse};
 use wasm_bindgen::{JsValue, JsCast};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::{RequestInit, Request, Response};
 
-use crate::{BlockRaycastSet, ui_plugin::MainTurtle};
+use crate::{BlockRaycastSet, ui_plugin::MainTurtle, WorldChangeEvent};
 
 pub struct BlockDestroyPlugin;
 
-#[derive(Deserialize, Debug)]
-struct DestroyBlockResponse {
-    can_break: bool
+#[derive(Resource)]
+struct BlockDestroyGate {
+    destroy_sender: Sender<DestroyBlockResponse>,
+    destroy_reciver: Receiver<DestroyBlockResponse>,
 }
 
 fn update_raycast_with_cursor(
@@ -38,6 +39,7 @@ fn detect_block_destroy_from_mouse(
     query_ray: Query<&mut RaycastSource<BlockRaycastSet>>,
     transform_query: Query<&Transform>,
     main_turtle: Res<MainTurtle>,
+    destroy_block_gate: Res<BlockDestroyGate>
 ) {
     if keyboard.just_pressed(MouseButton::Middle) {
         log::warn!("Click!");
@@ -71,6 +73,8 @@ fn detect_block_destroy_from_mouse(
                 } else {
                     return;
                 };
+
+                let mut tx = destroy_block_gate.destroy_sender.clone();
 
                 spawn_local(async move {
                     let string_direction = direction.to_string();
@@ -108,19 +112,38 @@ fn detect_block_destroy_from_mouse(
                         .await
                         .expect("Cannot get future from JS");
                     let result: DestroyBlockResponse = serde_wasm_bindgen::from_value(json).expect("Json serde error");
-                    log::warn!("{result:?}")
+                    tx.try_send(result).expect("Cannot send block destroy result to bevy");
                 });
             }
         }   
     }
 }
 
+fn detect_block_destroy_response(
+    mut world_change_writer: EventWriter<WorldChangeEvent>,
+    mut gate: ResMut<BlockDestroyGate>,
+) {
+    if let Ok(response) = gate.destroy_reciver.try_next() {
+        let response = response.expect("DestroyBlockResponse channel SHOULD never be closed!");
+
+        if let Some(change) = response.change {
+            world_change_writer.send(WorldChangeEvent(change))
+        }
+    }
+}
+
 impl Plugin for BlockDestroyPlugin {
-    fn build(&self, app: &mut App) { 
+    fn build(&self, app: &mut App) {
+        let (tx, rx) = channel::<DestroyBlockResponse>(8);
         app.add_plugin(DefaultRaycastingPlugin::<BlockRaycastSet>::default())
+            .insert_resource(BlockDestroyGate {
+                destroy_sender: tx,
+                destroy_reciver: rx,
+            })
             .add_system(
                 update_raycast_with_cursor.in_base_set(CoreSet::First).before(RaycastSystem::BuildRays::<BlockRaycastSet>)
             )
-            .add_system(detect_block_destroy_from_mouse.after(update_raycast_with_cursor));
+            .add_system(detect_block_destroy_from_mouse.after(update_raycast_with_cursor))
+            .add_system(detect_block_destroy_response);
     }
 }

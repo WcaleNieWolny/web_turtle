@@ -209,14 +209,8 @@ async fn destroy_block(
     let mut conn = conn.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Connection pool empty".to_string()))?;
 
     match turtle.destroy_block(&mut conn, side).await {
-        Ok(_) => return Ok(Json(json!({"can_break": true}))),
-        Err(err) => {
-            if matches!(err, turtle::TurtleDestroyBlockError::CannotBreak) {
-                return Ok(Json(json!({"can_break": false})))
-            } else {
-                return Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))   
-            }
-        },
+        Ok(val) => return Ok(Json(val)),
+        Err(err) => Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
     }
 }
 

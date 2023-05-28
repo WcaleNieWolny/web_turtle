@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use shared::{JsonTurtleRotation, WorldChange, WorldChangeAction, WorldChangeDeleteBlock, TurtleBlock, WorldChangeUpdateBlock, WorldChangeNewBlock};
+use shared::{JsonTurtleRotation, WorldChange, WorldChangeAction, WorldChangeDeleteBlock, TurtleBlock, WorldChangeUpdateBlock, WorldChangeNewBlock, DestroyBlockResponse};
 use thiserror::Error;
 use tokio::{sync::{oneshot, mpsc}, time::timeout};
 use tracing::error;
@@ -69,8 +69,6 @@ pub enum TurtleDestroyBlockError{
     RequestError(#[from] TurtleRequestError),
     #[error("Unexpected response ({0})")]
     UnexpectedResponse(String),
-    #[error("Cannot break block")]
-    CannotBreak,
     #[error("Not yet implemented")]
     NotImplemented
 }
@@ -258,7 +256,7 @@ impl Turtle {
         Ok(BlockData::list_by_turtle_id(connection, id)?)
     }
 
-    pub async fn destroy_block(&mut self, connection: &mut Connection, side: JsonTurtleRotation) -> Result<(), TurtleDestroyBlockError> {
+    pub async fn destroy_block(&mut self, connection: &mut Connection, side: JsonTurtleRotation) -> Result<DestroyBlockResponse, TurtleDestroyBlockError> {
         let payload = match side {
             JsonTurtleRotation::Forward => DESTROY_BLOCK_FRONT,
             _ => return Err(TurtleDestroyBlockError::NotImplemented)
@@ -272,9 +270,16 @@ impl Turtle {
                 let (x, y, z) = (self.turtle_data.x + x_diff, self.turtle_data.y + y_dif, self.turtle_data.z + z_diff);
 
                 BlockData::delete_by_xyz(connection, x, y, z)?;
-                return Ok(());
+                return Ok(DestroyBlockResponse {
+                    change: Some(WorldChange {
+                        x,
+                        y,
+                        z,
+                        action: WorldChangeAction::Delete(WorldChangeDeleteBlock()),
+                    }),
+                });
             }
-            "false" => return Err(TurtleDestroyBlockError::CannotBreak),
+            "false" => return Ok(DestroyBlockResponse { change: None }),
             _ => return Err(TurtleDestroyBlockError::UnexpectedResponse(response))
         }
     }
