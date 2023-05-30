@@ -73,6 +73,12 @@ pub enum TurtleDestroyBlockError{
     NotImplemented
 }
 
+#[derive(Error, Debug)]
+pub enum TurtleGetInventoryError {
+    #[error("Request error")]
+    RequestError(#[from] TurtleRequestError),
+}
+
 pub struct TurtleAsyncRequest {
     pub request: String,
     pub response: oneshot::Sender<Result<String, TurtleRequestError>>
@@ -282,5 +288,15 @@ impl Turtle {
             "false" => return Ok(DestroyBlockResponse { change: None }),
             _ => return Err(TurtleDestroyBlockError::UnexpectedResponse(response))
         }
+    }
+
+    pub async fn get_inventory(&mut self) -> Result<Vec<String>, TurtleRequestError>{
+        let mut res = Vec::<String>::with_capacity(16);
+
+        for i in 0..16 {
+            res.push(self.command(&format!("local item = turtle.getItemDetail({}) return textutils.serialiseJSON(item)", i)).await?);
+        };
+
+        Ok(res)
     }
 }
