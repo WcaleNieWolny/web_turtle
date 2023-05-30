@@ -4,70 +4,70 @@ use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
-pub enum JsonTurtleRotation {
+pub enum JsonTurtleDirection {
     Forward,
     Right,
     Backward,
     Left
 }
 
-impl ToString for JsonTurtleRotation {
+impl ToString for JsonTurtleDirection {
     fn to_string(&self) -> String {
         match self {
-            JsonTurtleRotation::Forward => "forward".to_string(),
-            JsonTurtleRotation::Backward => "backward".to_string(),
-            JsonTurtleRotation::Left => "left".to_string(),
-            JsonTurtleRotation::Right => "right".to_string(),
+            JsonTurtleDirection::Forward => "forward".to_string(),
+            JsonTurtleDirection::Backward => "backward".to_string(),
+            JsonTurtleDirection::Left => "left".to_string(),
+            JsonTurtleDirection::Right => "right".to_string(),
         }
     }
 }
 
-impl FromStr for JsonTurtleRotation {
+impl FromStr for JsonTurtleDirection {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         return Ok(match s {
-            "forward" => JsonTurtleRotation::Forward,
-            "backward" => JsonTurtleRotation::Backward,
-            "left" => JsonTurtleRotation::Left,
-            "right" => JsonTurtleRotation::Right,
+            "forward" => JsonTurtleDirection::Forward,
+            "backward" => JsonTurtleDirection::Backward,
+            "left" => JsonTurtleDirection::Left,
+            "right" => JsonTurtleDirection::Right,
             _ => return Err(())
         })
     }
 }
 
-impl JsonTurtleRotation {
+impl JsonTurtleDirection {
     /// # Returns
     /// A tuple (x, y, z)
     /// # Safety 
     /// NEVER CALL THIS FUNCTION WITH MoveDirection::Left OR MoveDirection:Right
-    pub fn to_turtle_move_diff(&self, turtle_rotation: &JsonTurtleRotation) -> (i32, i32, i32) {
+    pub fn to_turtle_move_diff(&self, turtle_rotation: &JsonTurtleDirection) -> (i32, i32, i32) {
         match turtle_rotation {
-            JsonTurtleRotation::Right => {
+            JsonTurtleDirection::Right => {
                 match self {
-                    JsonTurtleRotation::Forward => (1, 0, 0),
-                    JsonTurtleRotation::Backward => (-1, 0, 0),
+                    JsonTurtleDirection::Forward => (1, 0, 0),
+                    JsonTurtleDirection::Backward => (-1, 0, 0),
                     _ => unreachable!()
                 }
             },
-            JsonTurtleRotation::Left => {
+            JsonTurtleDirection::Left => {
                 match self {
-                    JsonTurtleRotation::Forward => (-1, 0, 0),
-                    JsonTurtleRotation::Backward => (1, 0, 0),
+                    JsonTurtleDirection::Forward => (-1, 0, 0),
+                    JsonTurtleDirection::Backward => (1, 0, 0),
                     _ => unreachable!()
                 }
             },
-            JsonTurtleRotation::Forward => {
+            JsonTurtleDirection::Forward => {
                 match self {
-                    JsonTurtleRotation::Forward => (0, 0, -1),
-                    JsonTurtleRotation::Backward => (0, 0, 1),
+                    JsonTurtleDirection::Forward => (0, 0, -1),
+                    JsonTurtleDirection::Backward => (0, 0, 1),
                     _ => unreachable!()
                 }
             },
-            JsonTurtleRotation::Backward => {
+            JsonTurtleDirection::Backward => {
                 match self {
-                    JsonTurtleRotation::Forward => (0, 0, 1),
-                    JsonTurtleRotation::Backward => (0, 0, -1),
+                    JsonTurtleDirection::Forward => (0, 0, 1),
+                    JsonTurtleDirection::Backward => (0, 0, -1),
                     _ => unreachable!()
                 }
             },
@@ -92,17 +92,17 @@ impl JsonTurtleRotation {
         }
     }
 
-    pub fn rotate_self(&mut self, rotation: &JsonTurtleRotation) {
+    pub fn rotate_self(&mut self, rotation: &JsonTurtleDirection) {
         let mut enum_number = self.to_i32();
         match rotation {
-            JsonTurtleRotation::Right => {
+            JsonTurtleDirection::Right => {
                 if enum_number == 3 {
                     enum_number = 0
                 } else {
                     enum_number += 1
                 }
             },
-            JsonTurtleRotation::Left => {
+            JsonTurtleDirection::Left => {
                 if enum_number == 0 {
                     enum_number = 3
                 } else {
@@ -122,7 +122,7 @@ pub struct JsonTurtle {
     pub x: i32,
     pub y: i32,
     pub z: i32,
-    pub rotation: JsonTurtleRotation
+    pub rotation: JsonTurtleDirection 
 }
 
 #[derive(Deserialize)]
@@ -181,7 +181,7 @@ pub struct TurtleMoveResponse {
     pub x: i32,
     pub y: i32,
     pub z: i32,
-    pub rotation: JsonTurtleRotation,
+    pub rotation: JsonTurtleDirection,
     pub changes: Vec<WorldChange>
 }
 

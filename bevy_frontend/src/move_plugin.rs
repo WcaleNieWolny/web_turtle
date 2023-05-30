@@ -3,7 +3,7 @@ use std::time::Duration;
 use bevy::prelude::*;
 use bevy_panorbit_camera::PanOrbitCamera;
 use futures::channel::mpsc::{self, Receiver, Sender};
-use shared::{JsonTurtleRotation, TurtleMoveResponse, WorldChange, WorldChangeAction};
+use shared::{JsonTurtleDirection, TurtleMoveResponse, WorldChange, WorldChangeAction};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::{Request, RequestInit, Response};
@@ -57,13 +57,13 @@ fn keybord_input(
     }
 
     let direction = if keys.pressed(KeyCode::W) {
-        JsonTurtleRotation::Forward
+        JsonTurtleDirection::Forward
     } else if keys.pressed(KeyCode::S) {
-        JsonTurtleRotation::Backward
+        JsonTurtleDirection::Backward
     } else if keys.pressed(KeyCode::A) {
-        JsonTurtleRotation::Left
+        JsonTurtleDirection::Left
     } else if keys.pressed(KeyCode::D) {
-        JsonTurtleRotation::Right
+        JsonTurtleDirection::Right
     } else {
         return;
     };
@@ -133,10 +133,10 @@ fn keybord_input(
             .as_mut()
             .and_then(|main_turtle| {
                 match direction {
-                    JsonTurtleRotation::Right | JsonTurtleRotation::Left => {
+                    JsonTurtleDirection::Right | JsonTurtleDirection::Left => {
                         main_turtle.rotation.rotate_self(&direction);
                     },
-                    JsonTurtleRotation::Backward | JsonTurtleRotation::Forward => {
+                    JsonTurtleDirection::Backward | JsonTurtleDirection::Forward => {
                         let (x_change, y_change, z_change) = direction.to_turtle_move_diff(&main_turtle.rotation);
                         main_turtle.x += x_change;
                         main_turtle.y += y_change;
@@ -257,11 +257,11 @@ fn on_turtle_change(
     }
 }
 
-fn rotation_to_start_loc(rot: &JsonTurtleRotation) -> (f32, f32, f32) {
+fn rotation_to_start_loc(rot: &JsonTurtleDirection) -> (f32, f32, f32) {
     return match rot {
-        JsonTurtleRotation::Forward => (0.0, 0.0, 0.0),
-        JsonTurtleRotation::Backward => (1.0, 1.0, std::f32::consts::PI),
-        JsonTurtleRotation::Right => (1.0, 0.0, std::f32::consts::PI * 1.5),
-        JsonTurtleRotation::Left => (0.0, 1.0, std::f32::consts::PI / 2.0),
+        JsonTurtleDirection::Forward => (0.0, 0.0, 0.0),
+        JsonTurtleDirection::Backward => (1.0, 1.0, std::f32::consts::PI),
+        JsonTurtleDirection::Right => (1.0, 0.0, std::f32::consts::PI * 1.5),
+        JsonTurtleDirection::Left => (0.0, 1.0, std::f32::consts::PI / 2.0),
     };
 }

@@ -7,8 +7,7 @@ use std::{net::SocketAddr, sync::Arc, collections::HashMap, time::Duration, erro
 use axum::{Router, extract::{WebSocketUpgrade, ConnectInfo, ws::{WebSocket, Message}, State, Path}, response::IntoResponse, routing::{get, put}, http::StatusCode, Json};
 use database::{SqlitePool, TurtleData, Connection, DatabaseActionError};
 use schema::MoveDirection;
-use serde_json::json;
-use shared::{JsonTurtle, TurtleMoveResponse, TurtleWorld, WorldBlock, JsonTurtleRotation};
+use shared::{JsonTurtle, TurtleMoveResponse, TurtleWorld, WorldBlock, JsonTurtleDirection};
 use tokio::{sync::{Mutex, mpsc}, time::timeout};
 use tower_http::{trace::{TraceLayer, DefaultMakeSpan}, cors::{CorsLayer, Any}};
 use tracing::{error, warn, debug};
@@ -203,7 +202,7 @@ async fn destroy_block(
         None => return Err((StatusCode::NOT_FOUND, StatusCode::NOT_FOUND.to_string())) 
     };
 
-    let side = JsonTurtleRotation::from_str(&command).or(Err((StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST.to_string())))?;
+    let side = JsonTurtleDirection::from_str(&command).or(Err((StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST.to_string())))?;
 
     let conn: Result<Connection, DatabaseActionError> = turtles.pool.clone().try_into();
     let mut conn = conn.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Connection pool empty".to_string()))?;

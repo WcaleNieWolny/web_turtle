@@ -4,7 +4,7 @@ use bevy_mod_raycast::{
     RaycastSystem,
 };
 use futures::channel::mpsc::{Sender, Receiver, channel};
-use shared::{JsonTurtleRotation, DestroyBlockResponse};
+use shared::{JsonTurtleDirection, DestroyBlockResponse};
 use wasm_bindgen::{JsValue, JsCast};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::{RequestInit, Request, Response};
@@ -39,7 +39,7 @@ fn detect_block_destroy_from_mouse(
     query_ray: Query<&mut RaycastSource<BlockRaycastSet>>,
     transform_query: Query<&Transform>,
     main_turtle: Res<MainTurtle>,
-    destroy_block_gate: Res<BlockDestroyGate>
+    destroy_block_gate: Res<BlockDestroyGate>,
 ) {
     if keyboard.just_pressed(MouseButton::Middle) {
         log::warn!("Click!");
@@ -58,15 +58,15 @@ fn detect_block_destroy_from_mouse(
 
                 let uuid = main_turtle_ref.uuid;
 
-                let (forward_x, forward_y, forward_z) = JsonTurtleRotation::Forward.to_turtle_move_diff(&main_turtle_ref.rotation);
+                let (forward_x, forward_y, forward_z) = JsonTurtleDirection::Forward.to_turtle_move_diff(&main_turtle_ref.rotation);
                 let (forward_x, forward_y, forward_z) = (forward_x as f32 + main_turtle_ref.x as f32, main_turtle_ref.y as f32 + forward_y as f32, forward_z as f32 + main_turtle_ref.z as f32);
-                let (back_x, back_y, back_z) = JsonTurtleRotation::Backward.to_turtle_move_diff(&main_turtle_ref.rotation);
+                let (back_x, back_y, back_z) = JsonTurtleDirection::Backward.to_turtle_move_diff(&main_turtle_ref.rotation);
                 let (back_x, back_y, back_z) = (back_x as f32 + main_turtle_ref.x as f32, main_turtle_ref.y as f32 + back_y as f32, back_z as f32 + main_turtle_ref.z as f32);
 
                 let direction = if forward_x == x && forward_z == z && forward_y == y {
-                    JsonTurtleRotation::Forward
+                    JsonTurtleDirection::Forward
                 } else if back_z == z && back_y == y && back_x == x {
-                    JsonTurtleRotation::Backward
+                    JsonTurtleDirection::Backward
                 } else if x == main_turtle_ref.x as f32 &&  y == main_turtle_ref.y as f32 + 1.0 && z == main_turtle_ref.z as f32 {
                     //TODO: ??;
                     return;

@@ -38,7 +38,7 @@ fn main() {
     // When building for WASM, print panics to the browser console
     use log::Level;
     panic::set_hook(Box::new(console_error_panic_hook::hook));
-    console_log::init_with_level(Level::Warn).unwrap();
+    console_log::init_with_level(Level::Debug).unwrap();
     spawn_local(async { async_main().await });
 }
 
@@ -61,8 +61,8 @@ async fn async_main() {
         .add_plugin(MovePlugin)
         .add_plugin(WorldPlugin)
         .add_plugin(BlockDestroyPlugin)
-        //.add_plugin(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
-        //.add_plugin(bevy::diagnostic::LogDiagnosticsPlugin::default())
+        .add_plugin(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
+        .add_plugin(bevy::diagnostic::LogDiagnosticsPlugin::default())
         .add_startup_system(setup)
         .run();
 }

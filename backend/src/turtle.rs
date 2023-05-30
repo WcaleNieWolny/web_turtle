@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use shared::{JsonTurtleRotation, WorldChange, WorldChangeAction, WorldChangeDeleteBlock, TurtleBlock, WorldChangeUpdateBlock, WorldChangeNewBlock, DestroyBlockResponse};
+use shared::{JsonTurtleDirection, WorldChange, WorldChangeAction, WorldChangeDeleteBlock, TurtleBlock, WorldChangeUpdateBlock, WorldChangeNewBlock, DestroyBlockResponse};
 use thiserror::Error;
 use tokio::{sync::{oneshot, mpsc}, time::timeout};
 use tracing::error;
@@ -100,29 +100,29 @@ impl MoveDirection {
     }
 
     /// Stub for .into()
-    pub fn to_json_enum(&self) -> JsonTurtleRotation {
+    pub fn to_json_enum(&self) -> JsonTurtleDirection {
         self.clone().into()
     }
 }
 
-impl From::<JsonTurtleRotation> for MoveDirection {
-    fn from(value: JsonTurtleRotation) -> Self {
+impl From::<JsonTurtleDirection> for MoveDirection {
+    fn from(value: JsonTurtleDirection) -> Self {
         return match value {
-            JsonTurtleRotation::Forward => MoveDirection::Forward, 
-            JsonTurtleRotation::Right => MoveDirection::Right,
-            JsonTurtleRotation::Backward => MoveDirection::Backward,
-            JsonTurtleRotation::Left => MoveDirection::Left,
+            JsonTurtleDirection::Forward => MoveDirection::Forward, 
+            JsonTurtleDirection::Right => MoveDirection::Right,
+            JsonTurtleDirection::Backward => MoveDirection::Backward,
+            JsonTurtleDirection::Left => MoveDirection::Left,
         }
     }
 }
 
-impl Into::<JsonTurtleRotation> for MoveDirection {
-    fn into(self) -> JsonTurtleRotation {
+impl Into::<JsonTurtleDirection> for MoveDirection {
+    fn into(self) -> JsonTurtleDirection {
         match self {
-            MoveDirection::Forward => JsonTurtleRotation::Forward,
-            MoveDirection::Right => JsonTurtleRotation::Right,
-            MoveDirection::Backward => JsonTurtleRotation::Backward,
-            MoveDirection::Left => JsonTurtleRotation::Left,
+            MoveDirection::Forward => JsonTurtleDirection::Forward,
+            MoveDirection::Right => JsonTurtleDirection::Right,
+            MoveDirection::Backward => JsonTurtleDirection::Backward,
+            MoveDirection::Left => JsonTurtleDirection::Left,
         }
     }
 }
@@ -262,9 +262,9 @@ impl Turtle {
         Ok(BlockData::list_by_turtle_id(connection, id)?)
     }
 
-    pub async fn destroy_block(&mut self, connection: &mut Connection, side: JsonTurtleRotation) -> Result<DestroyBlockResponse, TurtleDestroyBlockError> {
+    pub async fn destroy_block(&mut self, connection: &mut Connection, side: JsonTurtleDirection) -> Result<DestroyBlockResponse, TurtleDestroyBlockError> {
         let payload = match side {
-            JsonTurtleRotation::Forward => DESTROY_BLOCK_FRONT,
+            JsonTurtleDirection::Forward => DESTROY_BLOCK_FRONT,
             _ => return Err(TurtleDestroyBlockError::NotImplemented)
         };
 
