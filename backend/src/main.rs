@@ -47,6 +47,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .route("/turtle/list/", get(list_turtles))
         .route("/turtle/:id/world/", get(show_world))
         .route("/turtle/:id/destroy/", put(destroy_block))
+        .route("/turtle/:id/inventory/", get(get_inventory))
         // logging so we can see whats going on
         .layer(
             TraceLayer::new_for_http()
@@ -211,6 +212,23 @@ async fn destroy_block(
         Ok(val) => return Ok(Json(val)),
         Err(err) => Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
     }
+}
+
+async fn get_inventory(
+    State(turtles): State<TurtlesState>,
+    Path(uuid): Path<String>
+) -> Result<impl IntoResponse, (StatusCode, impl IntoResponse)> {
+    let mut guard = turtles.turtles.lock().await;
+
+    let uuid = Uuid::parse_str(&uuid).or(Err((StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST.to_string())))?;
+    let turtle = match guard.get_mut(&uuid) {
+        Some(v) => v,
+        None => return Err((StatusCode::NOT_FOUND, StatusCode::NOT_FOUND.to_string())) 
+    };
+
+    let inventory = turtle.get_inventory().await.map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+
+    Ok(Json(inventory))
 }
 
 async fn handle_socket(mut socket: WebSocket, _addr: SocketAddr, turtles: TurtlesState)  {

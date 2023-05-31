@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use serde_json::Value;
 use shared::{JsonTurtleDirection, WorldChange, WorldChangeAction, WorldChangeDeleteBlock, TurtleBlock, WorldChangeUpdateBlock, WorldChangeNewBlock, DestroyBlockResponse};
 use thiserror::Error;
 use tokio::{sync::{oneshot, mpsc}, time::timeout};
@@ -77,6 +78,8 @@ pub enum TurtleDestroyBlockError{
 pub enum TurtleGetInventoryError {
     #[error("Request error")]
     RequestError(#[from] TurtleRequestError),
+    #[error("Turtle response is not valid json")]
+    TurtleResponseNotJson
 }
 
 pub struct TurtleAsyncRequest {
@@ -290,11 +293,14 @@ impl Turtle {
         }
     }
 
-    pub async fn get_inventory(&mut self) -> Result<Vec<String>, TurtleRequestError>{
+    pub async fn get_inventory(&mut self) -> Result<Vec<String>, TurtleGetInventoryError>{
         let mut res = Vec::<String>::with_capacity(16);
 
         for i in 0..16 {
-            res.push(self.command(&format!("local item = turtle.getItemDetail({}) return textutils.serialiseJSON(item)", i)).await?);
+            let result = self.command(&format!("local item = turtle.getItemDetail({}) return textutils.serialiseJSON(item)", i)).await?;
+            let json: Value = serde_json::from_str(&result).or(Err(TurtleGetInventoryError::TurtleResponseNotJson))?;
+
+            res.push(json["name"].as_str().ok_or(TurtleGetInventoryError::TurtleResponseNotJson)?.to_string());
         };
 
         Ok(res)
