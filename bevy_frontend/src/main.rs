@@ -3,6 +3,7 @@ mod resize_plugin;
 mod ui_plugin;
 mod world_plugin;
 mod block_destroy_plugin;
+mod inventory_plugin;
 
 extern crate console_error_panic_hook;
 
@@ -19,6 +20,7 @@ use shared::{JsonTurtle, WorldChange};
 use ui_plugin::UiPlugin;
 use wasm_bindgen_futures::spawn_local;
 use world_plugin::WorldPlugin;
+use inventory_plugin::InventoryPlugin;
 
 #[derive(Reflect, Clone, Component)]
 pub struct BlockRaycastSet;
@@ -61,6 +63,7 @@ async fn async_main() {
         .add_plugin(MovePlugin)
         .add_plugin(WorldPlugin)
         .add_plugin(BlockDestroyPlugin)
+        .add_plugin(InventoryPlugin)
         .add_plugin(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
         .add_plugin(bevy::diagnostic::LogDiagnosticsPlugin::default())
         .add_startup_system(setup)
