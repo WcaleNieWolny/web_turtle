@@ -79,7 +79,9 @@ pub enum TurtleGetInventoryError {
     #[error("Request error")]
     RequestError(#[from] TurtleRequestError),
     #[error("Turtle response is not valid json")]
-    TurtleResponseNotJson
+    TurtleResponseNotJson,
+    #[error("Returned name does not contain \":\" symbol (cannot split)")]
+    InvalidName
 }
 
 pub struct TurtleAsyncRequest {
@@ -296,11 +298,14 @@ impl Turtle {
     pub async fn get_inventory(&mut self) -> Result<Vec<String>, TurtleGetInventoryError>{
         let mut res = Vec::<String>::with_capacity(16);
 
-        for i in 0..16 {
-            let result = self.command(&format!("local item = turtle.getItemDetail({}) return textutils.serialiseJSON(item)", i)).await?;
+        for i in 1..=16 {
+            let result = self.command(&format!("local item = turtle.getItemDetail({}) if (item ~= nil) then return textutils.serialiseJSON(item) else return nil end", i)).await?;
+            if result == "nil" {
+                continue;
+            }
             let json: Value = serde_json::from_str(&result).or(Err(TurtleGetInventoryError::TurtleResponseNotJson))?;
 
-            res.push(json["name"].as_str().ok_or(TurtleGetInventoryError::TurtleResponseNotJson)?.to_string());
+            res.push(json["name"].as_str().ok_or(TurtleGetInventoryError::TurtleResponseNotJson)?.split_once(":").ok_or(TurtleGetInventoryError::InvalidName)?.1.to_string());
         };
 
         Ok(res)
