@@ -185,6 +185,13 @@ pub struct TurtleMoveResponse {
     pub changes: Vec<WorldChange>
 }
 
+#[derive(Serialize, Deserialize, Debug)] 
+pub struct TurtleInventoryItem {
+    pub name: String,
+    pub count: i64,
+    pub selected: bool
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DestroyBlockResponse {
     pub change: Option<WorldChange>
