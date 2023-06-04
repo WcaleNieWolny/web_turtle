@@ -40,7 +40,7 @@ fn main() {
     // When building for WASM, print panics to the browser console
     use log::Level;
     panic::set_hook(Box::new(console_error_panic_hook::hook));
-    console_log::init_with_level(Level::Debug).unwrap();
+    console_log::init_with_level(Level::Warn).unwrap();
     spawn_local(async { async_main().await });
 }
 
