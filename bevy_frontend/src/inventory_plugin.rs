@@ -106,7 +106,7 @@ fn fetch_remote_inventory(
                 let json = match resp.json::<Vec<String>>().await {
                     Ok(val) => val,
                     Err(err) => {
-                        log::error!("Cannot parse inventory request as JSON! Err: {err}");
+                        log::error!("Cannot parse inventory response as JSON! Err: {err}");
                         return;
                     },
                 };

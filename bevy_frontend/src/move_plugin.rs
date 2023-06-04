@@ -3,10 +3,9 @@ use std::time::Duration;
 use bevy::prelude::*;
 use bevy_panorbit_camera::PanOrbitCamera;
 use futures::channel::mpsc::{self, Receiver, Sender};
-use shared::{JsonTurtleDirection, TurtleMoveResponse, WorldChange, WorldChangeAction};
-use wasm_bindgen::prelude::*;
-use wasm_bindgen_futures::{spawn_local, JsFuture};
-use web_sys::{Request, RequestInit, Response};
+use gloo_net::http::Request;
+use shared::{JsonTurtleDirection, TurtleMoveResponse};
+use wasm_bindgen_futures::spawn_local;
 
 use crate::{
     ui_plugin::MainTurtle, MainCamera, MainTurtleObject, SelectTurtleEvent, WorldChangeEvent,
@@ -83,49 +82,39 @@ fn keybord_input(
     gate.handle_request = true;
 
     let mut tx = gate.move_sender.clone();
-
     let main_turtle = main_turtle.clone();
+
     spawn_local(async move {
         let string_direction = direction.to_string();
+        let path = format!("/turtle/{uuid}/move/");
+        
+        let resp = Request::put(&path)
+            .body(string_direction)
+            .send()
+            .await;
 
-        let window = web_sys::window().expect("no global `window` exists");
-        let document = window.document().expect("should have a document on window");
+        match resp {
+            Ok(resp) => {
+                let result = match resp.json::<TurtleMoveResponse>().await {
+                    Ok(val) => val,
+                    Err(err) => {
+                        log::error!("Cannot parse move response as JSON! Err: {err}");
+                        tx.try_send(None)
+                            .expect("Cannot notify bevy move system (Err json)");
+                        return;
+                    },
+                };
 
-        let mut url = document
-            .base_uri()
-            .expect("Base uri get fail")
-            .expect("No base uri");
-        url.push_str("turtle/");
-        url.push_str(&uuid.to_string());
-        url.push_str("/move/");
-
-        let mut opts = RequestInit::new();
-        opts.method("PUT");
-        opts.body(Some(&JsValue::from_str(&string_direction)));
-
-        let request =
-            Request::new_with_str_and_init(&url, &opts).expect("Cannot create new request");
-        let resp_value = JsFuture::from(window.fetch_with_request(&request))
-            .await
-            .expect("Cannot fetch value");
-
-        assert!(resp_value.is_instance_of::<Response>());
-        let resp: Response = resp_value.dyn_into().expect("Cannot cast into response");
-
-        if resp.status() != 200 {
-            log::error!("Something went bad! :<");
-            tx.try_send(None)
-                .expect("Cannot notify bevy move system (Err)");
-            return;
+                tx.try_send(Some(result))
+                    .expect("Cannot notify bevy move system (Ok)");
+            },
+            Err(err) => {
+                log::error!("Put move request went wrong {err}");
+                tx.try_send(None)
+                    .expect("Cannot notify bevy move system (Err)");
+                return;
+            },
         }
-
-        let json = JsFuture::from(resp.json().expect("Cannot get json"))
-            .await
-            .expect("Cannot get future from JS");
-        let result: TurtleMoveResponse =
-            serde_wasm_bindgen::from_value(json).expect("Json serde error");
-        tx.try_send(Some(result))
-            .expect("Cannot notify bevy move system (Ok)");
 
         main_turtle
             .write()
