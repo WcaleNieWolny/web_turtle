@@ -304,6 +304,7 @@ impl Turtle {
                 continue;
             }
             let json: Value = serde_json::from_str(&result).or(Err(TurtleGetInventoryError::TurtleResponseNotJson))?;
+            tracing::debug!("INV: VAL = {json:?}");
 
             res.push(json["name"].as_str().ok_or(TurtleGetInventoryError::TurtleResponseNotJson)?.split_once(":").ok_or(TurtleGetInventoryError::InvalidName)?.1.to_string());
         };

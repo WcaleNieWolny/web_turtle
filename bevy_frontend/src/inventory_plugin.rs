@@ -1,7 +1,11 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiPlugin, EguiContexts, egui::{self, Align2, ScrollArea, TextStyle, FontFamily::Proportional, FontId, Visuals, Color32}};
 use bevy_panorbit_camera::PanOrbitCamera;
-use shared::TurtleInventoryItem;
+use gloo_net::http::Request;
+use shared::{TurtleInventoryItem, JsonTurtle};
+use wasm_bindgen_futures::spawn_local;
+
+use crate::ui_plugin::MainTurtle;
 
 pub struct InventoryPlugin;
 
@@ -59,21 +63,60 @@ fn setup_text_styles(
 fn open_ui_based_on_keyboard(
     keys: Res<Input<KeyCode>>,
     mut inventory_res: ResMut<TurtleInventoryResource>,
-    mut camera_query: Query<&mut PanOrbitCamera>
+    mut camera_query: Query<&mut PanOrbitCamera>,
+    main_turtle: Res<MainTurtle>,
 ) {
+    let open = &mut inventory_res.open;
     if keys.just_pressed(KeyCode::E) {
-        inventory_res.open = !inventory_res.open;
+        *open = !*open;
+
+        if *open {
+            //we had just opend the gui
+            let main_turtle = main_turtle.read().expect("Cannot read main_turtle");
+            match main_turtle.as_ref() {
+                Some(val) => fetch_remote_inventory(val),
+                None => {},
+            }
+        }
     }
 
     let mut camera = camera_query.single_mut();
 
-    if inventory_res.open {
+    if *open {
         camera.orbit_sensitivity = 0.0;
         camera.zoom_sensitivity = 0.0;
     } else {
         camera.orbit_sensitivity = 1.0;
         camera.zoom_sensitivity = 1.0;
     }
+}
+
+fn fetch_remote_inventory(
+    main_turtle: &JsonTurtle
+) {
+    let path = format!("/turtle/{}/inventory/", main_turtle.uuid);
+
+    spawn_local(async move {
+        let resp = Request::get(&path)
+            .send()
+            .await;
+
+        match resp {
+            Ok(resp) => {
+                let json = match resp.json::<Vec<String>>().await {
+                    Ok(val) => val,
+                    Err(err) => {
+                        log::error!("Cannot parse inventory request as JSON! Err: {err}");
+                        return;
+                    },
+                };
+
+                log::warn!("New turtle inventory: {json:?}")
+            },
+            Err(err) => log::error!("Feching inventory went wrong {err}"),
+        }
+
+    });
 }
 
 fn ui_example_system(
