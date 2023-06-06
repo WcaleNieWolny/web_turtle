@@ -49,6 +49,9 @@ pub struct BlockData {
     pub x: i32,
     pub y: i32,
     pub z: i32,
+    pub chunk_x: i32,
+    pub chunk_y: i32,
+    pub chunk_z: i32,
     pub name: String,
 }
 
@@ -130,7 +133,12 @@ impl BlockData {
         Ok(())
     }
 
-    pub fn list_by_turtle_id(connection: &mut SqliteConnection, id: i32) -> Result<Vec<BlockData>, diesel::result::Error> {
-        worlds_data::table.filter(worlds_data::turtle_id.eq(id)).load(connection)
+    pub fn list_by_turtle_id_and_chunks_xyz(connection: &mut SqliteConnection, id: i32, chunk_x: i32, chunk_y: i32, chunk_z: i32) -> Result<Vec<BlockData>, diesel::result::Error> {
+        worlds_data::table
+            .filter(worlds_data::turtle_id.eq(id))
+            .filter(worlds_data::chunk_x.eq(chunk_x))
+            .filter(worlds_data::chunk_y.eq(chunk_y))
+            .filter(worlds_data::chunk_z.eq(chunk_z))
+            .load(connection)
     }
 }

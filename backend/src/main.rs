@@ -4,7 +4,7 @@ mod schema;
 mod world;
 
 use std::{net::SocketAddr, sync::Arc, collections::HashMap, time::Duration, error::Error, str::FromStr};
-use axum::{Router, extract::{WebSocketUpgrade, ConnectInfo, ws::{WebSocket, Message}, State, Path}, response::IntoResponse, routing::{get, put}, http::StatusCode, Json};
+use axum::{Router, extract::{WebSocketUpgrade, ConnectInfo, ws::{WebSocket, Message}, State, Path, Query}, response::IntoResponse, routing::{get, put}, http::StatusCode, Json};
 use database::{SqlitePool, TurtleData, Connection, DatabaseActionError};
 use schema::MoveDirection;
 use shared::{JsonTurtle, TurtleMoveResponse, TurtleWorld, WorldBlock, JsonTurtleDirection};
@@ -45,7 +45,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .route("/turtle/:id/command/", put(command_turtle))
         .route("/turtle/:id/move/", put(move_turtle))
         .route("/turtle/list/", get(list_turtles))
-        .route("/turtle/:id/world/", get(show_world))
+        .route("/turtle/:id/chunk/", get(get_chunk))
         .route("/turtle/:id/destroy/", put(destroy_block))
         .route("/turtle/:id/inventory/", get(get_inventory))
         // logging so we can see whats going on
@@ -157,22 +157,28 @@ async fn list_turtles(
         .collect());
 }
 
-async fn show_world(
+async fn get_chunk(
     State(turtles): State<TurtlesState>,
-    Path(uuid): Path<String>,
+    Path(uuid): Path<Uuid>,
+    Query(params): Query<HashMap<String, i32>>
 ) -> Result<impl IntoResponse, (StatusCode, impl IntoResponse)> {
     let mut guard = turtles.turtles.lock().await;
 
-    let uuid = Uuid::parse_str(&uuid).or(Err((StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST.to_string())))?;
     let turtle = match guard.get_mut(&uuid) {
         Some(v) => v,
         None => return Err((StatusCode::NOT_FOUND, StatusCode::NOT_FOUND.to_string())) 
     };
 
+    let x = params.get("x").ok_or((StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST.to_string()))?;
+    let y = params.get("y").ok_or((StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST.to_string()))?;
+    let z = params.get("z").ok_or((StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST.to_string()))?;
+
+    tracing::debug!("{x} {y} {z}");
+
     let conn: Result<Connection, DatabaseActionError> = turtles.pool.clone().try_into();
     let mut conn = conn.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Connection pool empty".to_string()))?;
 
-    let blocks = turtle.show_world(&mut conn).await.map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    let blocks = turtle.get_chunk(&mut conn, *x, *y, *z).await.map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
     let world = TurtleWorld {
         blocks: blocks.iter().map(|block|  {
             let (r, g, b) = world::block_to_rgb(&block.name);

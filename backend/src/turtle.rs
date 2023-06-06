@@ -242,6 +242,9 @@ impl Turtle {
                         x,
                         y,
                         z,
+                        chunk_x: x >> 4, //Div by 16,
+                        chunk_y: y >> 4,
+                        chunk_z: z >> 4,
                         name,
                     };
                     new_db_block.insert(connection)?;
@@ -261,10 +264,17 @@ impl Turtle {
         Ok(changes)
     }
 
-    pub async fn show_world(&mut self, connection: &mut Connection) -> Result<Vec<BlockData>, TurtleWorldShowError> {
+    pub async fn get_chunk(
+        &mut self,
+        connection: &mut Connection,
+        chunk_x: i32,
+        chunk_y: i32,
+        chunk_z: i32
+    ) -> Result<Vec<BlockData>, TurtleWorldShowError> {
         let id = self.turtle_data.id.ok_or(TurtleWorldShowError::InvalidTurtleError)?;
 
-        Ok(BlockData::list_by_turtle_id(connection, id)?)
+
+        Ok(BlockData::list_by_turtle_id_and_chunks_xyz(connection, id, chunk_x, chunk_y, chunk_z)?)
     }
 
     pub async fn destroy_block(&mut self, connection: &mut Connection, side: JsonTurtleDirection) -> Result<DestroyBlockResponse, TurtleDestroyBlockError> {
