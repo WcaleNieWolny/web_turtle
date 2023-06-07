@@ -12,7 +12,8 @@ pub struct InventoryPlugin;
 #[derive(Resource)]
 struct TurtleInventoryResource {
     list: Vec<TurtleInventoryItem>,
-    open: bool
+    open: bool,
+    open_changed: bool
 }
 
 impl Plugin for InventoryPlugin {
@@ -31,7 +32,8 @@ impl Plugin for InventoryPlugin {
                         selected: true
                     }
                 ],
-                open: false
+                open: false,
+                open_changed: false
             })
             .add_plugin(EguiPlugin)
             .add_startup_system(setup_text_styles)
@@ -66,6 +68,7 @@ fn open_ui_based_on_keyboard(
     mut camera_query: Query<&mut PanOrbitCamera>,
     main_turtle: Res<MainTurtle>,
 ) {
+    let open_changed = *&inventory_res.open_changed;
     let open = &mut inventory_res.open;
     if keys.just_pressed(KeyCode::E) {
         *open = !*open;
@@ -80,14 +83,17 @@ fn open_ui_based_on_keyboard(
         }
     }
 
-    let mut camera = camera_query.single_mut();
+    if open_changed {
+        let mut camera = camera_query.single_mut();
 
-    if *open {
-        camera.orbit_sensitivity = 0.0;
-        camera.zoom_sensitivity = 0.0;
-    } else {
-        camera.orbit_sensitivity = 1.0;
-        camera.zoom_sensitivity = 1.0;
+        if *open {
+            camera.orbit_sensitivity = 0.0;
+            camera.zoom_sensitivity = 0.0;
+        } else {
+            camera.orbit_sensitivity = 1.0;
+            camera.zoom_sensitivity = 1.0;
+        }
+
     }
 }
 
@@ -159,6 +165,7 @@ fn ui_example_system(
                 }
             );
         });
-
+ 
     inventory_res.open = *open;
+    inventory_res.open_changed = inventory_res.open != *open; 
 }

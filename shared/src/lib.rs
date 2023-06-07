@@ -142,6 +142,9 @@ pub struct WorldBlock {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TurtleWorld {
+    pub chunk_x: i32,
+    pub chunk_y: i32,
+    pub chunk_z: i32,
     pub blocks: Vec<WorldBlock>,
 }
 

@@ -1,9 +1,11 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, pbr::wireframe::Wireframe};
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use shared::{JsonTurtle, TurtleWorld};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::{Request, RequestInit, Response};
+use block_mesh::ndshape::{ConstShape, ConstShape3u32};
+use block_mesh::{greedy_quads, GreedyQuadsBuffer, MergeVoxel, Voxel, VoxelVisibility, RIGHT_HANDED_Y_UP_CONFIG};
 
 use crate::{SelectTurtleEvent, WorldChangeEvent, BlockRaycastSet};
 
@@ -18,6 +20,33 @@ struct GlobalWorld {
     get_all_blocks_rx: Receiver<Option<TurtleWorld>>,
     get_all_blocks_tx: Sender<Option<TurtleWorld>>,
 }
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+struct BoolVoxel(bool);
+
+const EMPTY: BoolVoxel = BoolVoxel(false);
+const FULL: BoolVoxel = BoolVoxel(true);
+
+impl Voxel for BoolVoxel {
+    fn get_visibility(&self) -> VoxelVisibility {
+        if *self == EMPTY {
+            VoxelVisibility::Empty
+        } else {
+            VoxelVisibility::Opaque
+        }
+    }
+}
+
+impl MergeVoxel for BoolVoxel {
+    type MergeValue = Self;
+
+    fn merge_value(&self) -> Self::MergeValue {
+        *self
+    }
+}
+
+// A 16^3 chunk with 1-voxel boundary padding.
+type ChunkShape = ConstShape3u32<18, 18, 18>;
 
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
@@ -45,23 +74,16 @@ fn recive_all_new_world(
                 Some(world) => {
                     match world {
                         Some(world) => {
+                            //chunk_x, chunk_z >> 4 = down left corner 
+                            let mut voxels = [EMPTY; ChunkShape::SIZE as usize];
+                            for i in 0..ChunkShape::SIZE {
+                                let [x, y, z] = ChunkShape::delinearize(i);
+                                log::warn!("{x} {y} {z}");
+                            }
                             for block in &world.blocks {
-                                commands.spawn((
-                                    PbrBundle {
-                                        mesh: meshes.add(shape::Cube { size: 1.0 }.into()),
-                                        material: materials
-                                            .add(Color::rgb_u8(block.r, block.g, block.b).into()),
-                                        transform: Transform::from_xyz(
-                                            0.5 + block.x as f32,
-                                            block.y as f32 + 1.0,
-                                            0.5 + block.z as f32,
-                                        ),
-                                        ..default()
-                                    },
-                                    WorldBlock,
-                                    bevy_mod_raycast::RaycastMesh::<BlockRaycastSet>::default()
-                                    
-                                ));
+                                let (x, y, z) = (block.x % 16, block.y % 16, block.z % 16);
+
+                                //log::warn!("{x} {y} {z}")
                             }
                         }
                         None => return, //Something went wrong
@@ -95,17 +117,13 @@ fn turtle_change_listener(
                 let uuid = new_turtle.uuid;
                 let mut tx = global_world.get_all_blocks_tx.clone();
 
+                //-1 becouse idk yet
+                let (chunk_x, chunk_y, chunk_z) = (new_turtle.x >> 4, (new_turtle.y >> 4) - 1, new_turtle.z >> 4);
+
                 spawn_local(async move {
                     let window = web_sys::window().expect("no global `window` exists");
-                    let document = window.document().expect("should have a document on window");
 
-                    let mut url = document
-                        .base_uri()
-                        .expect("Base uri get fail")
-                        .expect("No base uri");
-                    url.push_str("turtle/");
-                    url.push_str(&uuid.to_string());
-                    url.push_str("/world/");
+                    let url = format!("/turtle/{uuid}/chunk/?x={chunk_x}&y={chunk_y}&z={chunk_z}");
 
                     let mut opts = RequestInit::new();
                     opts.method("GET");

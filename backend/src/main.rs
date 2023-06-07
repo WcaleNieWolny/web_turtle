@@ -190,7 +190,10 @@ async fn get_chunk(
                 y: block.y,
                 z: block.z,
             }
-        }).collect() 
+        }).collect(),
+        chunk_x: *x,
+        chunk_y: *y,
+        chunk_z: *z,
     };
 
     Ok(Json(world))

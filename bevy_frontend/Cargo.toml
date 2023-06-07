@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bevy = "0.10"
+bevy = { version = "0.10.1" }
 bevy_panorbit_camera = "0.4.1"
 console_error_panic_hook = "0.1"
 console_log = "1.0.0"
@@ -20,6 +20,9 @@ futures = { version = "0.3" }
 bevy_mod_raycast = "0.8.0"
 bevy_egui = "0.20.3"
 gloo-net = { version =  "0.2.6", features = ["http", "json"] }
+block-mesh = "0.2.0"
+
+#    this.chunk.x = this.block.x >> 4;     this.chunk.y = this.block.y >> 4;     this.chunk.z = this.block.z >> 4; 
 
 [dependencies.web-sys]
 version = "0.3.6"

@@ -10,7 +10,7 @@ extern crate console_error_panic_hook;
 use std::f32::consts::TAU;
 use std::panic;
 
-use bevy::prelude::*;
+use bevy::{prelude::*, render::{RenderPlugin, settings::{WgpuSettings, WgpuFeatures}}};
 use bevy_mod_raycast::RaycastSource;
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use block_destroy_plugin::BlockDestroyPlugin;
@@ -62,10 +62,10 @@ async fn async_main() {
         .add_plugin(PanOrbitCameraPlugin)
         .add_plugin(MovePlugin)
         .add_plugin(WorldPlugin)
-        .add_plugin(BlockDestroyPlugin)
-        .add_plugin(InventoryPlugin)
-        //.add_plugin(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
-        //.add_plugin(bevy::diagnostic::LogDiagnosticsPlugin::default())
+        //.add_plugin(BlockDestroyPlugin)
+        //.add_plugin(InventoryPlugin)
+        .add_plugin(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
+        .add_plugin(bevy::diagnostic::LogDiagnosticsPlugin::default())
         .add_startup_system(setup)
         .run();
 }
@@ -73,7 +73,6 @@ async fn async_main() {
 //https://bevyengine.org/examples/3d/3d-scene/
 /// set up a simple 3D scene
 fn setup(mut commands: Commands, assets: Res<AssetServer>) {
-
     let gltf: Handle<Scene> = assets.load("/assets/turtle_model.glb#Scene0");
     commands.spawn((
         SceneBundle {
