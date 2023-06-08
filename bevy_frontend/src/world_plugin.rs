@@ -1,5 +1,8 @@
+use bevy::render::mesh::{MeshVertexAttribute, Indices};
+use bevy::render::render_resource::{PrimitiveTopology, VertexFormat};
 use bevy::{prelude::*, pbr::wireframe::Wireframe};
 use futures::channel::mpsc::{channel, Receiver, Sender};
+use futures::executor::block_on;
 use shared::{JsonTurtle, TurtleWorld};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
@@ -76,15 +79,70 @@ fn recive_all_new_world(
                         Some(world) => {
                             //chunk_x, chunk_z >> 4 = down left corner 
                             let mut voxels = [EMPTY; ChunkShape::SIZE as usize];
-                            for i in 0..ChunkShape::SIZE {
-                                let [x, y, z] = ChunkShape::delinearize(i);
-                                log::warn!("{x} {y} {z}");
-                            }
-                            for block in &world.blocks {
-                                let (x, y, z) = (block.x % 16, block.y % 16, block.z % 16);
 
-                                //log::warn!("{x} {y} {z}")
+                            //down left corner
+                            let (chunk_top_x, chunk_top_z) = (world.chunk_x << 4, world.chunk_z << 4);
+                            log::warn!("corner {chunk_top_x} {chunk_top_z}");
+
+                            for block in &world.blocks {
+                                let (x, y, z) = ((block.x - chunk_top_x).abs() as u32, (block.y - (world.chunk_y << 4)) as u32, (block.z - chunk_top_z).abs() as u32);
+
+                                log::warn!("{x} {y} {z}");
+                                //this is the right down voxel
+
+                                voxels[ChunkShape::linearize([x, y, z]) as usize] = FULL;
+                                voxels[ChunkShape::linearize([x + 1, y, z]) as usize] = FULL;
+                                voxels[ChunkShape::linearize([x + 1, y + 1, z]) as usize] = FULL;
+                                voxels[ChunkShape::linearize([x + 1, y + 1, z + 1]) as usize] = FULL;
+                                voxels[ChunkShape::linearize([x, y + 1, z]) as usize] = FULL;
+                                voxels[ChunkShape::linearize([x, y + 1, z + 1]) as usize] = FULL;
+                                voxels[ChunkShape::linearize([x, y, z + 1]) as usize] = FULL;
+                                voxels[ChunkShape::linearize([x + 1, y, z + 1]) as usize] = FULL;
                             }
+
+                            let faces = RIGHT_HANDED_Y_UP_CONFIG.faces;
+
+                            let samples = voxels;
+                            let mut buffer = GreedyQuadsBuffer::new(samples.len());
+                            greedy_quads(
+                                &samples,
+                                &ChunkShape {},
+                                [0; 3],
+                                [17; 3],
+                                &faces,
+                                &mut buffer,
+                            );
+                            let num_indices = buffer.quads.num_quads() * 6;
+                            let num_vertices = buffer.quads.num_quads() * 4;
+                            let mut indices = Vec::with_capacity(num_indices);
+                            let mut positions = Vec::with_capacity(num_vertices);
+                            let mut normals = Vec::with_capacity(num_vertices);
+                            for (group, face) in buffer.quads.groups.into_iter().zip(faces.into_iter()) {
+                                for quad in group.into_iter() {
+                                    indices.extend_from_slice(&face.quad_mesh_indices(positions.len() as u32));
+                                    positions.extend_from_slice(&face.quad_mesh_positions(&quad, 1.0));
+                                    normals.extend_from_slice(&face.quad_mesh_normals());
+                                }
+                            }
+
+                            let mut render_mesh = Mesh::new(PrimitiveTopology::TriangleList);
+
+                            render_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+                            render_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+                            render_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0; 2]; num_vertices]);
+                            render_mesh.set_indices(Some(Indices::U32(indices.clone())));
+
+                            let mesh = meshes.add(render_mesh);
+
+                        let mut material = StandardMaterial::from(Color::rgb(0.0, 0.0, 0.0));
+                        material.perceptual_roughness = 0.9;
+
+                        commands.spawn(PbrBundle {
+                            mesh,
+                            material: materials.add(material),
+                            transform: Transform::from_xyz(chunk_top_x as f32, (world.chunk_y * 16) as f32, (chunk_top_z) as f32),
+                            ..Default::default()
+                        });
                         }
                         None => return, //Something went wrong
                     }
