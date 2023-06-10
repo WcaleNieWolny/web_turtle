@@ -2,7 +2,6 @@ use bevy::render::mesh::{MeshVertexAttribute, Indices};
 use bevy::render::render_resource::{PrimitiveTopology, VertexFormat};
 use bevy::{prelude::*, pbr::wireframe::Wireframe};
 use futures::channel::mpsc::{channel, Receiver, Sender};
-use futures::executor::block_on;
 use shared::{JsonTurtle, TurtleWorld};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
@@ -90,17 +89,12 @@ fn recive_all_new_world(
                                 log::warn!("{x} {y} {z}");
                                 //this is the right down voxel
 
-                                voxels[ChunkShape::linearize([x, y, z]) as usize] = FULL;
-                                voxels[ChunkShape::linearize([x + 1, y, z]) as usize] = FULL;
-                                voxels[ChunkShape::linearize([x + 1, y + 1, z]) as usize] = FULL;
                                 voxels[ChunkShape::linearize([x + 1, y + 1, z + 1]) as usize] = FULL;
-                                voxels[ChunkShape::linearize([x, y + 1, z]) as usize] = FULL;
-                                voxels[ChunkShape::linearize([x, y + 1, z + 1]) as usize] = FULL;
-                                voxels[ChunkShape::linearize([x, y, z + 1]) as usize] = FULL;
-                                voxels[ChunkShape::linearize([x + 1, y, z + 1]) as usize] = FULL;
                             }
 
                             let faces = RIGHT_HANDED_Y_UP_CONFIG.faces;
+
+                            log::warn!("Faces: {faces:?}");
 
                             let samples = voxels;
                             let mut buffer = GreedyQuadsBuffer::new(samples.len());

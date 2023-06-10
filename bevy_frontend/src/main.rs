@@ -97,7 +97,7 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>) {
         PanOrbitCamera {
             focus: Vec3::new(0.5, 0.5, 0.5),
             radius: 8.0,
-            pan_sensitivity: 0.0,
+            pan_sensitivity: 1.0,
             beta: TAU / 18.0,
             ..default()
         },

@@ -161,11 +161,11 @@ impl Turtle {
     pub async fn move_turtle(&mut self, direction: MoveDirection) -> Result<(), TurtleMoveError> {
         let command = match direction {
             MoveDirection::Forward => {
-                "return turtle.forward()"
+                "local a, b = turtle.forward() return a"
             },
-            MoveDirection::Backward => "return turtle.back()",
-            MoveDirection::Right => "return turtle.turnRight()",
-            MoveDirection::Left => "return turtle.turnLeft()"
+            MoveDirection::Backward => "local a, b = turtle.back() return a",
+            MoveDirection::Right => "local a, b = turtle.turnRight() return a",
+            MoveDirection::Left => "local a, b = turtle.turnLeft() return a"
         };
 
         let result = self.command(command).await?;
