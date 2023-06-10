@@ -1,5 +1,7 @@
-use std::str::FromStr;
+pub mod world_structure;
+pub mod parse;
 
+use std::str::FromStr;
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
@@ -131,21 +133,13 @@ pub struct TurtleBlock {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct WorldBlock {
+pub struct WorldUpdateBlock {
     pub r: u8,
     pub g: u8,
     pub b: u8,
     pub x: i32,
     pub y: i32,
     pub z: i32,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct TurtleWorld {
-    pub chunk_x: i32,
-    pub chunk_y: i32,
-    pub chunk_z: i32,
-    pub blocks: Vec<WorldBlock>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
