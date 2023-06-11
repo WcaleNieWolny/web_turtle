@@ -3,7 +3,7 @@ use std::{collections::HashMap, hash::{Hasher, Hash, BuildHasher}, error::Error,
 use bytes::{Bytes, BytesMut, BufMut, Buf};
 use bytestring::ByteString;
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct TurtleLocation {
     pub x: i32,
     pub y: i8,
@@ -11,12 +11,14 @@ pub struct TurtleLocation {
 
 }
 
+#[derive(Eq, PartialEq, Debug)]
 pub struct TurtleWorld {
     pallete: Vec<ByteString>,
     pallete_hashmap: HashMap<String, usize>, //Used to convert name of block into pallete index
     chunks: HashMap<TurtleLocation, TurtleChunk, DumbHasherBuilder>,
 }
 
+#[derive(Eq, PartialEq, Debug)]
 pub struct TurtleChunk {
     location: TurtleLocation,
     data: Bytes
@@ -31,7 +33,7 @@ impl TurtleWorld {
         }
     }
 
-    pub fn to_bytes(self) -> Result<Bytes, Box<dyn Error>> {
+    pub fn to_bytes(&self) -> Result<Bytes, Box<dyn Error>> {
         let mut bytes = BytesMut::new();
 
         macro_rules! write_usize {
@@ -150,6 +152,19 @@ impl TurtleWorld {
             pallete_hashmap
         })
     }
+
+    #[must_use]
+    fn get_pallete_index(&mut self, item: &str) -> usize {
+        match self.pallete_hashmap.get(item) {
+            Some(id) => *id,
+            None => {
+                self.pallete.push(into_byte_string(item.into()));
+                let id = self.pallete.len() - 1;
+                self.pallete_hashmap.insert(item.into(), id);
+                id
+            },
+        }
+    }
 }
 
 struct DumbHasher {
@@ -207,11 +222,12 @@ mod tests {
     #[test]
     fn test_encoding_and_decoding() {
         let mut world = TurtleWorld::new();
-        let byte_str = ByteString::from_static("Hello world");
-        world.pallete.push(byte_str);
+        let _ = world.get_pallete_index("hello world");
 
         let bytes = world.to_bytes().expect("Cannot serialize!");
 
         let deserialized = TurtleWorld::from_bytes(bytes).expect("Cannot deserialize");
+
+        assert!(deserialized == world);
     }
 }
