@@ -3,6 +3,7 @@ use std::{collections::HashMap, hash::{Hasher, Hash, BuildHasher}, error::Error,
 use bytes::{Bytes, BytesMut, BufMut, Buf};
 use bytestring::ByteString;
 
+#[derive(Clone, Eq, PartialEq)]
 pub struct TurtleLocation {
     pub x: i32,
     pub y: i8,
@@ -69,22 +70,85 @@ impl TurtleWorld {
     }
 
     pub fn from_bytes(mut bytes: Bytes) -> Result<Self, Box<dyn Error>>{
+
+        macro_rules! safe_assert {
+            ($cond:expr) => {
+                if !$cond {
+                    return Err(format!("Safe assert failed ({}:{})) Cond: {}", std::file!(), std::line!(), stringify!($cond)).into())
+                }
+            };
+        }
+
+        macro_rules! assert_len {
+            ($len:expr) => {
+                safe_assert!(bytes.remaining() >= $len);
+            };
+        }
+       
+        assert_len!(8);
         let pallete_len = bytes.get_u64_le().try_into()?;
-        let pallete: Vec<ByteString> = (0..pallete_len)
+        let pallete: Result<Vec<ByteString>, String> = (0..pallete_len)
             .into_iter()
             .map(|_| {
+                assert_len!(8);
                 let len = bytes.get_u64_le() as usize;
                 let bytes_read = bytes.len() - bytes.remaining();
+                assert_len!(len);
                 let byte_string = unsafe {
-                    ByteString::from_bytes_unchecked(bytes.slice(bytes_read..(bytes_read + len)))
+                    let to_ret = ByteString::from_bytes_unchecked(bytes.slice(bytes_read..(bytes_read + len)));
+                    bytes.advance(len);
+                    Ok(to_ret)
                 };
 
                 byte_string
             })
             .collect();
+        let pallete = pallete?;
 
-        
-        panic!("pal: {pallete:?}") 
+        let pallete_hashmap = pallete
+            .iter()
+            .enumerate()
+            .map(|(id, string)| {
+                (str::to_owned(string), id)
+            })
+            .collect();
+
+        assert_len!(8);
+        let chunks_len = bytes.get_i64_le().try_into()?;
+        let chunks: Result<HashMap<TurtleLocation, TurtleChunk, DumbHasherBuilder>, String> = (0..chunks_len)
+            .into_iter()
+            .map(|_| {
+                assert_len!(9);
+                let x = bytes.get_i32_le();
+                let y = bytes.get_i8();
+                let z = bytes.get_i32_le();
+
+                let data_len = bytes.get_u64_le() as usize;
+                let bytes_read = bytes.len() - bytes.remaining();
+                assert!(bytes_read + data_len <= bytes.len());
+                let data = bytes.slice(bytes_read..(bytes_read + data_len));
+                bytes.advance(data_len);
+
+                let location = TurtleLocation {
+                    x,
+                    y,
+                    z
+                };
+
+                Ok((location.clone(), TurtleChunk {
+                    location,
+                    data
+                }))
+            })
+            .collect();
+
+        let chunks = chunks?;
+
+        Ok(Self {
+            chunks,
+            pallete,
+            pallete_hashmap
+        })
     }
 }
 
