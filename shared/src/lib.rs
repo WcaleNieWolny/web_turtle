@@ -1,5 +1,4 @@
 pub mod world_structure;
-pub mod parse;
 
 use std::str::FromStr;
 use serde::{Serialize, Deserialize};
