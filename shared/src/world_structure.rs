@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::{Hasher, Hash, BuildHasher}, error::Error, ops::Deref};
+use std::{collections::{HashMap, hash_map::ValuesMut}, hash::{Hasher, Hash, BuildHasher}, error::Error, ops::Deref};
 
 use bytes::{Bytes, BytesMut, BufMut, Buf};
 use bytestring::ByteString;
@@ -56,6 +56,16 @@ impl TurtleVoxel {
         Self {
             id
         }
+    }
+}
+
+impl TurtleChunk {
+    pub fn get_global_block_xyz(&self, x: i32, y: i32, z: i32) -> TurtleVoxel {
+        let (chunk_top_x, chunk_top_z) = (self.location.x << 4, self.location.z << 4);
+
+        //These are local chunk XYZ
+        let (x, y, z) = ((x - chunk_top_x).abs() as u32, (y - ((self.location.y as i32) << 4)) as u32, (z - chunk_top_z).abs() as u32);
+        return self.data[ChunkShape::linearize([x + 1, y + 1, z + 1]) as usize]
     }
 }
 
@@ -204,6 +214,29 @@ impl TurtleWorld {
             pallete,
             pallete_hashmap
         })
+    }
+
+    ///Note: This will return none if the voxel is air
+    pub fn get_chunk_by_block_xyz(&self, x: i32, y: i32, z: i32) -> Option<TurtleVoxel> {
+        let chunk_y: i8 = match y.try_into().ok() {
+            Some(val) => val,
+            None => return None
+        };
+
+        let (chunk_x, chunk_y, chunk_z) = (x << 4, chunk_y << 4, z << 4);
+        let chunk_loc = TurtleLocation::xyz(chunk_x, chunk_y, chunk_z);
+
+        let chunk = match self.chunks.get(&chunk_loc).ok_or(format!("Chunk ({chunk_x} {chunk_y} {chunk_z}) Block ({x} {y} {z}) does not exist")) {
+            Ok(val) => val,
+            Err(_) => return None
+        };
+
+        let voxel = chunk.get_global_block_xyz(x, y, z);
+        return if voxel.id == 0 {
+            None
+        } else {
+            Some(voxel) 
+        }
     }
 
     #[must_use]
