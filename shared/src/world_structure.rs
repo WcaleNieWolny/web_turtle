@@ -2,6 +2,17 @@ use std::{collections::HashMap, hash::{Hasher, Hash, BuildHasher}, error::Error,
 
 use bytes::{Bytes, BytesMut, BufMut, Buf};
 use bytestring::ByteString;
+use ndcopy::copy3;
+use ndshape::{ConstShape3u32, ConstShape};
+
+pub type ChunkShape = ConstShape3u32<18, 18, 18>;
+pub type RealChunkShape = ConstShape3u32<16, 16, 16>;
+
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+#[repr(transparent)]
+pub struct TurtleVoxel {
+    id: u16
+}
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct TurtleLocation {
@@ -21,7 +32,31 @@ pub struct TurtleWorld {
 #[derive(Eq, PartialEq, Debug)]
 pub struct TurtleChunk {
     location: TurtleLocation,
-    data: Bytes
+    data: [TurtleVoxel; ChunkShape::SIZE as usize]
+}
+
+impl TurtleLocation {
+    pub fn xyz(x: i32, y: i8, z: i32) -> Self {
+        TurtleLocation {
+            x,
+            y,
+            z
+        }
+    }
+}
+
+impl TurtleVoxel {
+    pub fn air() -> Self {
+        Self {
+            id: 0
+        }
+    }
+
+    pub fn id(id: u16) -> Self {
+        Self {
+            id
+        }
+    }
 }
 
 impl TurtleWorld {
@@ -65,7 +100,15 @@ impl TurtleWorld {
             bytes.put_i32_le(chunk.location.x);
             bytes.put_i8(chunk.location.y);
             bytes.put_i32_le(chunk.location.z);
-            write_slice!(chunk.data.deref());
+
+            let mut real_data = [TurtleVoxel::air(); RealChunkShape::SIZE as usize];
+            copy3([16; 3], &chunk.data, &ChunkShape {}, [1; 3], &mut real_data, &RealChunkShape {}, [0; 3]);
+            let real_data: Vec<u8> = real_data
+                .iter()
+                .flat_map(|x| x.id.to_le_bytes())
+                .collect();
+
+            write_slice!(&real_data);
         }
 
         Ok(bytes.freeze())
@@ -137,9 +180,19 @@ impl TurtleWorld {
                     z
                 };
 
+                let data_read: Vec<TurtleVoxel> = data
+                    .chunks(2)
+                    .map(|data| u16::from_le_bytes([data[0], data[1]]))
+                    .map(|data| TurtleVoxel::id(data))
+                    .collect();
+
+                let mut final_data = [TurtleVoxel::air(); ChunkShape::SIZE as usize];
+
+                copy3([16; 3], &data_read, &RealChunkShape {}, [0; 3], &mut final_data, &ChunkShape {}, [1; 3]);
+
                 Ok((location.clone(), TurtleChunk {
                     location,
-                    data
+                    data: final_data
                 }))
             })
             .collect();
@@ -217,15 +270,27 @@ pub fn into_byte_string(data: String) -> ByteString {
 mod tests {
     use bytestring::ByteString;
 
-    use crate::world_structure::TurtleWorld;
+    use crate::world_structure::{TurtleWorld, TurtleChunk};
+    use crate::world_structure::TurtleVoxel;
+    use crate::world_structure::ChunkShape;
+    use crate::world_structure::TurtleLocation;
+    use ndshape::ConstShape;
 
     #[test]
     fn test_encoding_and_decoding() {
         let mut world = TurtleWorld::new();
+
         let _ = world.get_pallete_index("hello world");
+        let loc = TurtleLocation::xyz(0, 0, 0);
+        let mut chunk = TurtleChunk {
+            location: loc.clone(),
+            data: [TurtleVoxel::air(); ChunkShape::SIZE as usize],
+        };
+
+        chunk.data[ChunkShape::linearize([15u32; 3]) as usize] = TurtleVoxel::id(12);
+        world.chunks.insert(loc, chunk);
 
         let bytes = world.to_bytes().expect("Cannot serialize!");
-
         let deserialized = TurtleWorld::from_bytes(bytes).expect("Cannot deserialize");
 
         assert!(deserialized == world);

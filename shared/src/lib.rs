@@ -1,4 +1,5 @@
 pub mod world_structure;
+pub mod static_vec;
 
 use std::str::FromStr;
 use serde::{Serialize, Deserialize};
