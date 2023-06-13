@@ -1,12 +1,12 @@
 use std::time::Duration;
 
 use serde_json::Value;
-use shared::{JsonTurtleDirection, WorldChange, WorldChangeAction, WorldChangeDeleteBlock, TurtleBlock, WorldChangeUpdateBlock, WorldChangeNewBlock, DestroyBlockResponse};
+use shared::{JsonTurtleDirection, WorldChange, WorldChangeAction, WorldChangeDeleteBlock, TurtleBlock, WorldChangeUpdateBlock, WorldChangeNewBlock, DestroyBlockResponse, JsonTurtle, world_structure::TurtleWorld};
 use thiserror::Error;
 use tokio::{sync::{oneshot, mpsc}, time::timeout};
 use tracing::error;
 
-use crate::{database::{TurtleData, DatabaseActionError, Connection, BlockData}, schema::MoveDirection, world};
+use crate::{database::DatabaseActionError, world};
 
 //Lua inspect logic
 static INSPECT_DOWN_PAYLOAD: &str = "local has_block, data = turtle.inspectDown() return textutils.serialiseJSON(data)";
@@ -44,20 +44,20 @@ pub enum TurtleMoveError {
 pub enum TurtleWorldScanError {
     #[error("Request error")]
     RequestError(#[from] TurtleRequestError),
-    #[error("Database error")]
-    DatabaseError(#[from] DatabaseActionError),
     #[error("Json error")]
     JsonError(#[from] serde_json::error::Error),
     #[error("Cannot rotate turtle")]
     TurtleRotationError(#[from] TurtleMoveError),
     #[error("Turtle does not have ID")]
-    InvalidTurtle
+    InvalidTurtle,
+    #[error("Dynamic Error")]
+    DynamicError(#[from] Box<dyn std::error::Error>),
+    #[error("Corrupted world {0}")]
+    CorruptedWorld(String)
 }
 
 #[derive(Error, Debug)]
 pub enum TurtleWorldShowError {
-    #[error("Database error")]
-    DatabaseError(#[from] diesel::result::Error),
     #[error("Turtle does not contain ID")]
     InvalidTurtleError
 }
@@ -89,53 +89,11 @@ pub struct TurtleAsyncRequest {
     pub response: oneshot::Sender<Result<String, TurtleRequestError>>
 }
 
-impl ToString for MoveDirection {
-    fn to_string(&self) -> String {
-        self.to_json_enum().to_string()
-    }
-}
-
-impl MoveDirection {
-    /// # Returns
-    /// A tuple (x, y, z)
-    /// # Safety 
-    /// NEVER CALL THIS FUNCTION WITH MoveDirection::Left OR MoveDirection:Right
-    fn to_turtle_move_diff(&self, turtle: &Turtle) -> (i32, i32, i32) {
-        return self.to_json_enum().to_turtle_move_diff(&turtle.turtle_data.rotation.to_json_enum())
-    }
-
-    /// Stub for .into()
-    pub fn to_json_enum(&self) -> JsonTurtleDirection {
-        self.clone().into()
-    }
-}
-
-impl From::<JsonTurtleDirection> for MoveDirection {
-    fn from(value: JsonTurtleDirection) -> Self {
-        return match value {
-            JsonTurtleDirection::Forward => MoveDirection::Forward, 
-            JsonTurtleDirection::Right => MoveDirection::Right,
-            JsonTurtleDirection::Backward => MoveDirection::Backward,
-            JsonTurtleDirection::Left => MoveDirection::Left,
-        }
-    }
-}
-
-impl Into::<JsonTurtleDirection> for MoveDirection {
-    fn into(self) -> JsonTurtleDirection {
-        match self {
-            MoveDirection::Forward => JsonTurtleDirection::Forward,
-            MoveDirection::Right => JsonTurtleDirection::Right,
-            MoveDirection::Backward => JsonTurtleDirection::Backward,
-            MoveDirection::Left => JsonTurtleDirection::Left,
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct Turtle {
     pub request_queue: mpsc::Sender<TurtleAsyncRequest>,
-    pub turtle_data: TurtleData
+    pub turtle_data: JsonTurtle,
+    pub world: TurtleWorld
 }
 
 impl Turtle {
@@ -158,27 +116,25 @@ impl Turtle {
         }
     }
 
-    pub async fn move_turtle(&mut self, direction: MoveDirection) -> Result<(), TurtleMoveError> {
+    pub async fn move_turtle(&mut self, direction: JsonTurtleDirection) -> Result<(), TurtleMoveError> {
         let command = match direction {
-            MoveDirection::Forward => {
+            JsonTurtleDirection::Forward => {
                 "local a, b = turtle.forward() return a"
             },
-            MoveDirection::Backward => "local a, b = turtle.back() return a",
-            MoveDirection::Right => "local a, b = turtle.turnRight() return a",
-            MoveDirection::Left => "local a, b = turtle.turnLeft() return a"
+            JsonTurtleDirection::Backward => "local a, b = turtle.back() return a",
+            JsonTurtleDirection::Right => "local a, b = turtle.turnRight() return a",
+            JsonTurtleDirection::Left => "local a, b = turtle.turnLeft() return a"
         };
 
         let result = self.command(command).await?;
         match result.as_str() {
             "true" => {
                 match direction {
-                    MoveDirection::Right | MoveDirection::Left => {
-                        let mut rot = self.turtle_data.rotation.to_json_enum();
-                        rot.rotate_self(&direction.to_json_enum());
-                        self.turtle_data.rotation = rot.into(); 
+                    JsonTurtleDirection::Right | JsonTurtleDirection::Left => {
+                        self.turtle_data.rotation.rotate_self(&direction); 
                     },
                     direction => {
-                        let (x_diff, y_diff, z_diff) = direction.to_turtle_move_diff(&self);
+                        let (x_diff, y_diff, z_diff) = direction.to_turtle_move_diff(&self.turtle_data.rotation);
                         self.turtle_data.x += x_diff;
                         self.turtle_data.y += y_diff;
                         self.turtle_data.z += z_diff;
@@ -191,16 +147,15 @@ impl Turtle {
         }
     }
 
-    pub async fn scan_world_changes(&mut self, connection: &mut Connection) -> Result<Vec<WorldChange>, TurtleWorldScanError> {
+    pub async fn scan_world_changes(&mut self) -> Result<Vec<WorldChange>, TurtleWorldScanError> {
         let x = self.turtle_data.x;
         let y = self.turtle_data.y;
         let z = self.turtle_data.z;
-        let turtle_id = self.turtle_data.id.ok_or(TurtleWorldScanError::InvalidTurtle)?;
 
         let blocks: Vec<(String, i32, i32, i32)> = vec![
             (self.command(INSPECT_DOWN_PAYLOAD).await?, x, y - 1, z),
             {
-                let (x_diff, y_diff, z_diff) = MoveDirection::Forward.to_turtle_move_diff(&self);
+                let (x_diff, y_diff, z_diff) = JsonTurtleDirection::Forward.to_turtle_move_diff(&self.turtle_data.rotation);
                 let forward = self.command(INSPECT_FORWARD_PAYLOAD).await?;
                 (forward, x + x_diff, y + y_diff, z + z_diff)
             },
@@ -210,14 +165,14 @@ impl Turtle {
          let changes = blocks
             .into_iter()
             .map(|(block, x, y, z)| {
-                let db_block = BlockData::read_by_xyz(connection, x, y, z).ok();
+                let db_block = self.world.get_chunk_block_by_global_xyz(x, y, z);
 
                 if block == "\"No block to inspect\"" {
                     if db_block.is_none() {
                         return Ok(None);
                     }
 
-                    BlockData::delete_by_xyz(connection, x, y, z)?;
+                    &self.world.remove_global_block_by_xyz(x, y, z)?;
                     let action = WorldChangeAction::Delete(WorldChangeDeleteBlock {});
                     return Ok(Some(WorldChange { x, y, z, action }));
                 }
@@ -226,7 +181,8 @@ impl Turtle {
                 let color = world::block_color(&name);
 
                 let action = if let Some(mut db_block) = db_block {
-                    if name == db_block.name {
+                    let db_block_name = self.world.get_pallete_from_id(db_block.id).ok_or(TurtleWorldScanError::CorruptedWorld("Pallete does not containt voxel id".into()))?;
+                    if name.as_str() == db_block_name.as_ref() {
                         return Ok(None);
                     }
 

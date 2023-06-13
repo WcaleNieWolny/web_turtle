@@ -11,7 +11,7 @@ pub type RealChunkShape = ConstShape3u32<16, 16, 16>;
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 #[repr(transparent)]
 pub struct TurtleVoxel {
-    id: u16
+    pub id: u16
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -66,6 +66,21 @@ impl TurtleChunk {
         //These are local chunk XYZ
         let (x, y, z) = ((x - chunk_top_x).abs() as u32, (y - ((self.location.y as i32) << 4)) as u32, (z - chunk_top_z).abs() as u32);
         return self.data[ChunkShape::linearize([x + 1, y + 1, z + 1]) as usize]
+    }
+
+    pub fn remove_by_global_xyz(&mut self, x: i32, y: i32, z: i32) -> Result<(), Box<dyn Error>> {
+        let (chunk_top_x, chunk_top_z) = (self.location.x << 4, self.location.z << 4);
+
+        //These are local chunk XYZ
+        let (x, y, z): (u32, u32, u32) = ((x - chunk_top_x).abs().try_into()?, (y - ((self.location.y as i32) << 4)).try_into()?, (z - chunk_top_z).abs().try_into()?);
+
+        let data = &mut self.data[ChunkShape::linearize([(x + 1).try_into()?, (y + 1).try_into()?, (z + 1).try_into()?]) as usize];
+        if data.id == 0 {
+            return Err("Given block is already air".into());
+        };
+        data.id = 0;
+
+        Ok(())
     }
 }
 
@@ -217,18 +232,18 @@ impl TurtleWorld {
     }
 
     ///Note: This will return none if the voxel is air
-    pub fn get_chunk_by_block_xyz(&self, x: i32, y: i32, z: i32) -> Option<TurtleVoxel> {
-        let chunk_y: i8 = match y.try_into().ok() {
+    pub fn get_chunk_block_by_global_xyz(&self, x: i32, y: i32, z: i32) -> Option<TurtleVoxel> {
+        let chunk_y: i8 = match (y << 4).try_into().ok() {
             Some(val) => val,
             None => return None
         };
 
-        let (chunk_x, chunk_y, chunk_z) = (x << 4, chunk_y << 4, z << 4);
+        let (chunk_x, chunk_z) = (x << 4, z << 4);
         let chunk_loc = TurtleLocation::xyz(chunk_x, chunk_y, chunk_z);
 
-        let chunk = match self.chunks.get(&chunk_loc).ok_or(format!("Chunk ({chunk_x} {chunk_y} {chunk_z}) Block ({x} {y} {z}) does not exist")) {
-            Ok(val) => val,
-            Err(_) => return None
+        let chunk = match self.chunks.get(&chunk_loc) {
+            Some(val) => val,
+            None => return None
         };
 
         let voxel = chunk.get_global_block_xyz(x, y, z);
@@ -237,6 +252,20 @@ impl TurtleWorld {
         } else {
             Some(voxel) 
         }
+    }
+
+    pub fn remove_global_block_by_xyz(&mut self, x: i32, y: i32, z: i32) -> Result<(), Box<dyn Error>> {
+        let chunk_y: i8 = (y << 4).try_into()?;
+
+        let (chunk_x, chunk_z) = (x << 4, z << 4);
+        let chunk_loc = TurtleLocation::xyz(chunk_x, chunk_y, chunk_z);
+
+        let chunk = self.chunks.get_mut(&chunk_loc).ok_or("Given block does not exist (chunk_err)".to_owned())?;
+        return chunk.remove_by_global_xyz(x, y, z);
+    }
+
+    pub fn get_pallete_from_id(&self, id: u16) -> Option<ByteString> {
+        return self.pallete.get(id as usize).cloned()
     }
 
     #[must_use]

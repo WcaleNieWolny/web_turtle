@@ -17,7 +17,5 @@ thiserror = "1"
 uuid = { version = "1", features = ["v4"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0"
-diesel = { version = "2", features = ["sqlite", "r2d2"] }
-diesel-derive-enum = { version = "2", features = ["sqlite"] }
 seahash = "4.1.0"
 shared = { path = "../shared/" }
