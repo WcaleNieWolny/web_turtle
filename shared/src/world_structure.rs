@@ -69,18 +69,26 @@ impl TurtleChunk {
     }
 
     pub fn remove_by_global_xyz(&mut self, x: i32, y: i32, z: i32) -> Result<(), Box<dyn Error>> {
+        return self.update_voxel_by_global_xyz(x, y, z, |voxel| {
+            if voxel.id == 0 {
+                return Err("Given block is already air".into());
+            };
+            voxel.id = 0;
+            Ok(())
+        });
+    }
+
+    pub fn update_voxel_by_global_xyz<F>(&mut self, x: i32, y: i32, z: i32, mut func: F) -> Result<(), Box<dyn Error>> 
+        where F: FnMut(&mut TurtleVoxel) -> Result<(), Box<dyn Error>>{
+
         let (chunk_top_x, chunk_top_z) = (self.location.x << 4, self.location.z << 4);
 
         //These are local chunk XYZ
         let (x, y, z): (u32, u32, u32) = ((x - chunk_top_x).abs().try_into()?, (y - ((self.location.y as i32) << 4)).try_into()?, (z - chunk_top_z).abs().try_into()?);
 
-        let data = &mut self.data[ChunkShape::linearize([(x + 1).try_into()?, (y + 1).try_into()?, (z + 1).try_into()?]) as usize];
-        if data.id == 0 {
-            return Err("Given block is already air".into());
-        };
-        data.id = 0;
+        let data = self.data.get_mut(ChunkShape::linearize([(x + 1).try_into()?, (y + 1).try_into()?, (z + 1).try_into()?]) as usize).ok_or::<String>("Something went really wrong, linearize is out of bounds".into())?;
 
-        Ok(())
+        func(data)
     }
 }
 
