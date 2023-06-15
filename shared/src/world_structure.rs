@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, hash_map::ValuesMut}, hash::{Hasher, Hash, BuildHasher}, error::Error, ops::Deref};
+use std::{collections::HashMap, hash::{Hasher, Hash, BuildHasher}, error::Error};
 
 use bytes::{Bytes, BytesMut, BufMut, Buf};
 use bytestring::ByteString;
@@ -15,7 +15,7 @@ pub struct TurtleVoxel {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub struct TurtleLocation {
+pub struct ChunkLocation {
     pub x: i32,
     pub y: i8,
     pub z: i32,
@@ -26,22 +26,33 @@ pub struct TurtleLocation {
 pub struct TurtleWorld {
     pallete: Vec<ByteString>,
     pallete_hashmap: HashMap<String, usize>, //Used to convert name of block into pallete index
-    chunks: HashMap<TurtleLocation, TurtleChunk, DumbHasherBuilder>,
+    chunks: HashMap<ChunkLocation, TurtleChunk, DumbHasherBuilder>,
 }
 
 #[derive(Eq, PartialEq, Debug)]
 pub struct TurtleChunk {
-    location: TurtleLocation,
+    location: ChunkLocation,
     data: [TurtleVoxel; ChunkShape::SIZE as usize]
 }
 
-impl TurtleLocation {
+impl ChunkLocation {
     pub fn xyz(x: i32, y: i8, z: i32) -> Self {
-        TurtleLocation {
+        ChunkLocation {
             x,
             y,
             z
         }
+    }
+
+    ///Padding is left to individual functions
+    #[inline(always)]
+    fn global_xyz_to_local(&self, x: i32, y: i32, z: i32) -> Result<(u32, u32, u32), Box<dyn Error>> {
+        let (chunk_top_x, chunk_top_z) = (self.x << 4, self.z << 4);
+
+        //These are local chunk XYZ
+        let (x, y, z): (u32, u32, u32) = ((x - chunk_top_x).abs().try_into()?, (y - ((self.y as i32) << 4)).try_into()?, (z - chunk_top_z).abs().try_into()?);
+
+        Ok((x, y, z))
     }
 }
 
@@ -60,12 +71,13 @@ impl TurtleVoxel {
 }
 
 impl TurtleChunk {
-    pub fn get_global_block_xyz(&self, x: i32, y: i32, z: i32) -> TurtleVoxel {
-        let (chunk_top_x, chunk_top_z) = (self.location.x << 4, self.location.z << 4);
-
-        //These are local chunk XYZ
-        let (x, y, z) = ((x - chunk_top_x).abs() as u32, (y - ((self.location.y as i32) << 4)) as u32, (z - chunk_top_z).abs() as u32);
+    fn get_global_block_xyz(&self, x: i32, y: i32, z: i32) -> TurtleVoxel {
+        let (x, y, z) = self.location.global_xyz_to_local(x, y, z).expect("Global XYZ -> local XYZ conv failed");
         return self.data[ChunkShape::linearize([x + 1, y + 1, z + 1]) as usize]
+    }
+
+    pub fn get_mut_block_by_local_xyz(&mut self, x: u32, y: u32, z: u32) -> Option<&mut TurtleVoxel> {
+        return self.data.get_mut(ChunkShape::linearize([x + 1, y + 1, z + 1]) as usize);
     }
 
     pub fn remove_by_global_xyz(&mut self, x: i32, y: i32, z: i32) -> Result<(), Box<dyn Error>> {
@@ -81,11 +93,7 @@ impl TurtleChunk {
     pub fn update_voxel_by_global_xyz<F>(&mut self, x: i32, y: i32, z: i32, mut func: F) -> Result<(), Box<dyn Error>> 
         where F: FnMut(&mut TurtleVoxel) -> Result<(), Box<dyn Error>>{
 
-        let (chunk_top_x, chunk_top_z) = (self.location.x << 4, self.location.z << 4);
-
-        //These are local chunk XYZ
-        let (x, y, z): (u32, u32, u32) = ((x - chunk_top_x).abs().try_into()?, (y - ((self.location.y as i32) << 4)).try_into()?, (z - chunk_top_z).abs().try_into()?);
-
+        let (x, y, z) = self.location.global_xyz_to_local(x, y, z)?;
         let data = self.data.get_mut(ChunkShape::linearize([(x + 1).try_into()?, (y + 1).try_into()?, (z + 1).try_into()?]) as usize).ok_or::<String>("Something went really wrong, linearize is out of bounds".into())?;
 
         func(data)
@@ -193,7 +201,7 @@ impl TurtleWorld {
 
         assert_len!(8);
         let chunks_len = bytes.get_i64_le().try_into()?;
-        let chunks: Result<HashMap<TurtleLocation, TurtleChunk, DumbHasherBuilder>, String> = (0..chunks_len)
+        let chunks: Result<HashMap<ChunkLocation, TurtleChunk, DumbHasherBuilder>, String> = (0..chunks_len)
             .into_iter()
             .map(|_| {
                 assert_len!(9);
@@ -207,7 +215,7 @@ impl TurtleWorld {
                 let data = bytes.slice(bytes_read..(bytes_read + data_len));
                 bytes.advance(data_len);
 
-                let location = TurtleLocation {
+                let location = ChunkLocation {
                     x,
                     y,
                     z
@@ -239,34 +247,27 @@ impl TurtleWorld {
         })
     }
 
-    ///Note: This will return none if the voxel is air
-    pub fn get_chunk_block_by_global_xyz(&self, x: i32, y: i32, z: i32) -> Option<TurtleVoxel> {
+    pub fn get_mut_chunk_by_loc(&mut self, loc: &ChunkLocation) -> Option<&mut TurtleChunk> {
+        self.chunks.get_mut(loc)
+    }
+
+    pub fn get_chunk_loc_from_global_xyz(x: i32, y: i32, z: i32) -> Result<(ChunkLocation, u32, u32, u32), Box<dyn Error>> {
         let chunk_y: i8 = match (y << 4).try_into().ok() {
             Some(val) => val,
-            None => return None
+            None => return Err("Cannot do chunk loc convertion".into())
         };
 
         let (chunk_x, chunk_z) = (x << 4, z << 4);
-        let chunk_loc = TurtleLocation::xyz(chunk_x, chunk_y, chunk_z);
-
-        let chunk = match self.chunks.get(&chunk_loc) {
-            Some(val) => val,
-            None => return None
-        };
-
-        let voxel = chunk.get_global_block_xyz(x, y, z);
-        return if voxel.id == 0 {
-            None
-        } else {
-            Some(voxel) 
-        }
+        let chunk_loc = ChunkLocation::xyz(chunk_x, chunk_y, chunk_z);
+        let (x, y, z) = chunk_loc.global_xyz_to_local(x, y, z)?;
+        return Ok((chunk_loc, x, y, z))
     }
 
     pub fn remove_global_block_by_xyz(&mut self, x: i32, y: i32, z: i32) -> Result<(), Box<dyn Error>> {
         let chunk_y: i8 = (y << 4).try_into()?;
 
         let (chunk_x, chunk_z) = (x << 4, z << 4);
-        let chunk_loc = TurtleLocation::xyz(chunk_x, chunk_y, chunk_z);
+        let chunk_loc = ChunkLocation::xyz(chunk_x, chunk_y, chunk_z);
 
         let chunk = self.chunks.get_mut(&chunk_loc).ok_or("Given block does not exist (chunk_err)".to_owned())?;
         return chunk.remove_by_global_xyz(x, y, z);
@@ -277,7 +278,7 @@ impl TurtleWorld {
     }
 
     #[must_use]
-    fn get_pallete_index(&mut self, item: &str) -> usize {
+    pub fn get_pallete_index(&mut self, item: &str) -> usize {
         match self.pallete_hashmap.get(item) {
             Some(id) => *id,
             None => {
@@ -319,7 +320,7 @@ impl Hasher for DumbHasher {
     }
 }
 
-impl Hash for TurtleLocation {
+impl Hash for ChunkLocation {
     fn hash<H: Hasher>(&self, state: &mut H) {
         let x = self.x.to_le_bytes();
         let z = self.z.to_le_bytes();
@@ -343,7 +344,7 @@ mod tests {
     use crate::world_structure::{TurtleWorld, TurtleChunk};
     use crate::world_structure::TurtleVoxel;
     use crate::world_structure::ChunkShape;
-    use crate::world_structure::TurtleLocation;
+    use crate::world_structure::ChunkLocation;
     use ndshape::ConstShape;
 
     #[test]
@@ -351,7 +352,7 @@ mod tests {
         let mut world = TurtleWorld::new();
 
         let _ = world.get_pallete_index("hello world");
-        let loc = TurtleLocation::xyz(0, 0, 0);
+        let loc = ChunkLocation::xyz(0, 0, 0);
         let mut chunk = TurtleChunk {
             location: loc.clone(),
             data: [TurtleVoxel::air(); ChunkShape::SIZE as usize],

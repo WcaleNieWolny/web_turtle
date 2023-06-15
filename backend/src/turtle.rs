@@ -1,7 +1,7 @@
-use std::time::Duration;
+use std::{time::Duration, num::TryFromIntError};
 
 use serde_json::Value;
-use shared::{JsonTurtleDirection, WorldChange, WorldChangeAction, WorldChangeDeleteBlock, TurtleBlock, WorldChangeUpdateBlock, WorldChangeNewBlock, DestroyBlockResponse, JsonTurtle, world_structure::TurtleWorld};
+use shared::{JsonTurtleDirection, WorldChange, WorldChangeAction, WorldChangeDeleteBlock, TurtleBlock, WorldChangeUpdateBlock, WorldChangeNewBlock, DestroyBlockResponse, JsonTurtle, world_structure::{TurtleWorld, TurtleVoxel, TurtleChunk}};
 use thiserror::Error;
 use tokio::{sync::{oneshot, mpsc}, time::timeout};
 use tracing::error;
@@ -53,7 +53,11 @@ pub enum TurtleWorldScanError {
     #[error("Dynamic Error")]
     DynamicError(#[from] Box<dyn std::error::Error>),
     #[error("Corrupted world {0}")]
-    CorruptedWorld(String)
+    CorruptedWorld(String),
+    #[error("Cannot convent int types")]
+    IntError(#[from] TryFromIntError),
+    #[error("Unreachable reached ({0})")]
+    UnreachableReached(String)
 }
 
 #[derive(Error, Debug)]
@@ -165,7 +169,24 @@ impl Turtle {
          let changes = blocks
             .into_iter()
             .map(|(block, x, y, z)| {
-                let db_block = self.world.get_chunk_block_by_global_xyz(x, y, z);
+                let (loc, local_x, local_y, local_z) = TurtleWorld::get_chunk_loc_from_global_xyz(x, y, z)?;
+                
+                let chunk = self.world.get_mut_chunk_by_loc(&loc);
+                let db_block: Result<Option<(&mut TurtleVoxel, &TurtleChunk)>, _> = match chunk {
+                    None => Ok(None),
+                    Some(chunk) => {
+                        let voxel = match chunk.get_mut_block_by_local_xyz(local_x, local_y, local_z) {
+                            Some(v) => v,
+                            None => {
+                                return Err(TurtleWorldScanError::UnreachableReached("lineralize error".into()))
+                            }
+                        };
+
+                        Ok(Some((voxel, chunk)))
+                    }
+                };
+
+                let db_block = db_block?;
 
                 if block == "\"No block to inspect\"" {
                     if db_block.is_none() {
@@ -180,30 +201,25 @@ impl Turtle {
                 let name = serde_json::from_str::<TurtleBlock>(&block)?.name;
                 let color = world::block_color(&name);
 
-                let action = if let Some(mut db_block) = db_block {
+                let action = if let Some((mut db_block, chunk)) = db_block {
                     let db_block_name = self.world.get_pallete_from_id(db_block.id).ok_or(TurtleWorldScanError::CorruptedWorld("Pallete does not containt voxel id".into()))?;
-                    if name.as_str() == db_block_name.as_ref() {
+                    if name.as_str() == &*db_block_name {
                         return Ok(None);
                     }
 
-                    db_block.name = name;
-                    db_block.update(connection)?;
+                    let pallete_id = self.world.get_pallete_index(&name);
+                    db_block.id = pallete_id.try_into()?;
+
+                    //TODO: SAVE
+                    //db_block.update(connection)?;
                     WorldChangeAction::Update(WorldChangeUpdateBlock {
                         color,
                     })
                 } else {
-                    let new_db_block = BlockData {
-                        id: None,
-                        turtle_id,
-                        x,
-                        y,
-                        z,
-                        chunk_x: x >> 4, //Div by 16,
-                        chunk_y: y >> 4,
-                        chunk_z: z >> 4,
-                        name,
-                    };
-                    new_db_block.insert(connection)?;
+                    let pallete_id: u16 = self.world.get_pallete_index(&name).try_into()?;
+                    let voxel = TurtleVoxel::id(pallete_id);
+
+
                     let color = world::block_to_rgb(&block);
                     WorldChangeAction::New(WorldChangeNewBlock {
                         r: color.0,
