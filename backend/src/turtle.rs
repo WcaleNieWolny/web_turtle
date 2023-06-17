@@ -3,10 +3,11 @@ use std::{time::Duration, num::TryFromIntError};
 use serde_json::Value;
 use shared::{JsonTurtleDirection, WorldChange, WorldChangeAction, WorldChangeDeleteBlock, TurtleBlock, WorldChangeUpdateBlock, WorldChangeNewBlock, DestroyBlockResponse, JsonTurtle, world_structure::{TurtleWorld, TurtleVoxel, TurtleChunk}};
 use thiserror::Error;
-use tokio::{sync::{oneshot, mpsc}, time::timeout};
+use tokio::{sync::{oneshot, mpsc::{self, Sender}}, time::timeout};
 use tracing::error;
+use uuid::Uuid;
 
-use crate::{database::DatabaseActionError, world};
+use crate::{database::{DatabaseActionError, TurtleDatabase, self}, world};
 
 //Lua inspect logic
 static INSPECT_DOWN_PAYLOAD: &str = "local has_block, data = turtle.inspectDown() return textutils.serialiseJSON(data)";
@@ -97,10 +98,24 @@ pub struct TurtleAsyncRequest {
 pub struct Turtle {
     pub request_queue: mpsc::Sender<TurtleAsyncRequest>,
     pub turtle_data: JsonTurtle,
-    pub world: TurtleWorld
+    pub world: TurtleWorld,
+    database: TurtleDatabase
 }
 
 impl Turtle {
+
+    pub fn new(uuid: Uuid, data: JsonTurtle, tx: Sender<TurtleAsyncRequest>) -> Self {
+        let db = TurtleDatabase::new_from_id(uuid).expect("DB err");
+
+        todo!();
+        Self {
+            request_queue: tx,
+            turtle_data: data,
+            world: todo!(),
+            database: todo!(),
+        }
+    }
+
     pub async fn command(&mut self, command: &str) -> Result<String, TurtleRequestError> {
         let (tx, rx) = oneshot::channel::<Result<String, TurtleRequestError>>();
 
@@ -170,9 +185,10 @@ impl Turtle {
             .into_iter()
             .map(|(block, x, y, z)| {
                 let (loc, local_x, local_y, local_z) = TurtleWorld::get_chunk_loc_from_global_xyz(x, y, z)?;
-                
-                let chunk = self.world.get_mut_chunk_by_loc(&loc);
-                let db_block: Result<Option<(&mut TurtleVoxel, &TurtleChunk)>, _> = match chunk {
+              
+                let (palette, chunks) = self.world.get_fields_mut();
+                let chunk = chunks.get_mut_chunk_by_loc(&loc);
+                let db_block: Result<Option<&mut TurtleVoxel>, TurtleWorldScanError> = match chunk {
                     None => Ok(None),
                     Some(chunk) => {
                         let voxel = match chunk.get_mut_block_by_local_xyz(local_x, local_y, local_z) {
@@ -182,7 +198,7 @@ impl Turtle {
                             }
                         };
 
-                        Ok(Some((voxel, chunk)))
+                        Ok(Some(voxel))
                     }
                 };
 
@@ -193,7 +209,7 @@ impl Turtle {
                         return Ok(None);
                     }
 
-                    &self.world.remove_global_block_by_xyz(x, y, z)?;
+                    chunks.remove_global_block_by_xyz(x, y, z)?;
                     let action = WorldChangeAction::Delete(WorldChangeDeleteBlock {});
                     return Ok(Some(WorldChange { x, y, z, action }));
                 }
@@ -201,31 +217,35 @@ impl Turtle {
                 let name = serde_json::from_str::<TurtleBlock>(&block)?.name;
                 let color = world::block_color(&name);
 
-                let action = if let Some((mut db_block, chunk)) = db_block {
-                    let db_block_name = self.world.get_pallete_from_id(db_block.id).ok_or(TurtleWorldScanError::CorruptedWorld("Pallete does not containt voxel id".into()))?;
-                    if name.as_str() == &*db_block_name {
-                        return Ok(None);
+                let action = match db_block {
+                    Some(db_block) if db_block.id != 0 => {
+                        let db_block_name = palette.get_pallete_from_id(db_block.id).ok_or(TurtleWorldScanError::CorruptedWorld("Pallete does not containt voxel id".into()))?;
+                        if name.as_str() == &*db_block_name {
+                            return Ok(None);
+                        }
+
+                        let pallete_id = palette.get_pallete_index(&name);
+                        db_block.id = pallete_id.try_into()?;
+
+                        //TODO: SAVE
+                        //db_block.update(connection)?;
+                        WorldChangeAction::Update(WorldChangeUpdateBlock {
+                            color,
+                        })
+
+                        }
+                    _ => {
+                        let pallete_id: u16 = palette.get_pallete_index(&name).try_into()?;
+                        let voxel = TurtleVoxel::id(pallete_id);
+
+                        //TODO: Get chunks and set new voxel
+                        let color = world::block_to_rgb(&block);
+                        WorldChangeAction::New(WorldChangeNewBlock {
+                            r: color.0,
+                            g: color.1,
+                            b: color.2,
+                        })
                     }
-
-                    let pallete_id = self.world.get_pallete_index(&name);
-                    db_block.id = pallete_id.try_into()?;
-
-                    //TODO: SAVE
-                    //db_block.update(connection)?;
-                    WorldChangeAction::Update(WorldChangeUpdateBlock {
-                        color,
-                    })
-                } else {
-                    let pallete_id: u16 = self.world.get_pallete_index(&name).try_into()?;
-                    let voxel = TurtleVoxel::id(pallete_id);
-
-
-                    let color = world::block_to_rgb(&block);
-                    WorldChangeAction::New(WorldChangeNewBlock {
-                        r: color.0,
-                        g: color.1,
-                        b: color.2,
-                    })
                 };
 
                 Ok(Some(WorldChange { x, y, z, action }))
@@ -236,20 +256,8 @@ impl Turtle {
         Ok(changes)
     }
 
-    pub async fn get_chunk(
-        &mut self,
-        connection: &mut Connection,
-        chunk_x: i32,
-        chunk_y: i32,
-        chunk_z: i32
-    ) -> Result<Vec<BlockData>, TurtleWorldShowError> {
-        let id = self.turtle_data.id.ok_or(TurtleWorldShowError::InvalidTurtleError)?;
-
-
-        Ok(BlockData::list_by_turtle_id_and_chunks_xyz(connection, id, chunk_x, chunk_y, chunk_z)?)
-    }
-
-    pub async fn destroy_block(&mut self, connection: &mut Connection, side: JsonTurtleDirection) -> Result<DestroyBlockResponse, TurtleDestroyBlockError> {
+    pub async fn destroy_block(&mut self, side: JsonTurtleDirection) -> Result<DestroyBlockResponse, TurtleDestroyBlockError> {
+        unreachable!();
         let payload = match side {
             JsonTurtleDirection::Forward => DESTROY_BLOCK_FRONT,
             _ => return Err(TurtleDestroyBlockError::NotImplemented)
@@ -262,7 +270,7 @@ impl Turtle {
                 let (x_diff, y_dif, z_diff) = side.to_turtle_move_diff(&self.turtle_data.rotation.into());
                 let (x, y, z) = (self.turtle_data.x + x_diff, self.turtle_data.y + y_dif, self.turtle_data.z + z_diff);
 
-                BlockData::delete_by_xyz(connection, x, y, z)?;
+                //BlockData::delete_by_xyz(connection, x, y, z)?;
                 return Ok(DestroyBlockResponse {
                     change: Some(WorldChange {
                         x,

@@ -23,10 +23,20 @@ pub struct ChunkLocation {
 }
 
 #[derive(Eq, PartialEq, Debug)]
+pub struct TurtleWorldData {
+    chunks: HashMap<ChunkLocation, TurtleChunk, DumbHasherBuilder>, 
+}
+
+#[derive(Eq, PartialEq, Debug, Default)]
+pub struct TurtleWorldPalette {
+    palette: Vec<ByteString>,
+    palette_hashmap: HashMap<String, usize>, //Used to convert name of block into pallete index,
+}
+
+#[derive(Eq, PartialEq, Debug)]
 pub struct TurtleWorld {
-    pallete: Vec<ByteString>,
-    pallete_hashmap: HashMap<String, usize>, //Used to convert name of block into pallete index
-    chunks: HashMap<ChunkLocation, TurtleChunk, DumbHasherBuilder>,
+    pub pallete: TurtleWorldPalette,
+    pub data: TurtleWorldData
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -103,9 +113,10 @@ impl TurtleChunk {
 impl TurtleWorld {
     pub fn new() -> Self {
         Self {
-            pallete: Vec::new(),
-            pallete_hashmap: HashMap::new(),
-            chunks: HashMap::with_hasher(DumbHasherBuilder),
+            pallete: TurtleWorldPalette::default(),
+            data: TurtleWorldData { 
+                chunks: HashMap::with_hasher(DumbHasherBuilder)
+            },
         }
     }
 
@@ -130,13 +141,13 @@ impl TurtleWorld {
             };
         }
 
-        write_usize!(self.pallete.len());
-        for block_name in &self.pallete {
+        write_usize!(self.pallete.palette.len());
+        for block_name in &self.pallete.palette {
             write_slice!(str::as_bytes(&block_name))
         }
-        write_usize!(self.chunks.len());
+        write_usize!(self.data.chunks.len());
 
-        for (_, chunk) in &self.chunks {
+        for (_, chunk) in &self.data.chunks {
             bytes.reserve(9);
             bytes.put_i32_le(chunk.location.x);
             bytes.put_i8(chunk.location.y);
@@ -189,9 +200,9 @@ impl TurtleWorld {
                 byte_string
             })
             .collect();
-        let pallete = pallete?;
+        let palette = pallete?;
 
-        let pallete_hashmap = pallete
+        let palette_hashmap = palette
             .iter()
             .enumerate()
             .map(|(id, string)| {
@@ -241,14 +252,14 @@ impl TurtleWorld {
         let chunks = chunks?;
 
         Ok(Self {
-            chunks,
-            pallete,
-            pallete_hashmap
+            data: TurtleWorldData {
+                chunks
+            },
+            pallete: TurtleWorldPalette {
+                palette,
+                palette_hashmap
+            }
         })
-    }
-
-    pub fn get_mut_chunk_by_loc(&mut self, loc: &ChunkLocation) -> Option<&mut TurtleChunk> {
-        self.chunks.get_mut(loc)
     }
 
     pub fn get_chunk_loc_from_global_xyz(x: i32, y: i32, z: i32) -> Result<(ChunkLocation, u32, u32, u32), Box<dyn Error>> {
@@ -263,6 +274,16 @@ impl TurtleWorld {
         return Ok((chunk_loc, x, y, z))
     }
 
+    pub fn get_fields_mut(&mut self) -> (&mut TurtleWorldPalette, &mut TurtleWorldData) {
+        let TurtleWorld { pallete, data } = self;
+        (pallete, data)
+    }
+}
+
+impl TurtleWorldData {
+    pub fn get_mut_chunk_by_loc(&mut self, loc: &ChunkLocation) -> Option<&mut TurtleChunk> {
+        self.chunks.get_mut(loc)
+    }
     pub fn remove_global_block_by_xyz(&mut self, x: i32, y: i32, z: i32) -> Result<(), Box<dyn Error>> {
         let chunk_y: i8 = (y << 4).try_into()?;
 
@@ -272,19 +293,21 @@ impl TurtleWorld {
         let chunk = self.chunks.get_mut(&chunk_loc).ok_or("Given block does not exist (chunk_err)".to_owned())?;
         return chunk.remove_by_global_xyz(x, y, z);
     }
+}
 
+impl TurtleWorldPalette {
     pub fn get_pallete_from_id(&self, id: u16) -> Option<ByteString> {
-        return self.pallete.get(id as usize).cloned()
+        return self.palette.get(id as usize).cloned()
     }
 
     #[must_use]
     pub fn get_pallete_index(&mut self, item: &str) -> usize {
-        match self.pallete_hashmap.get(item) {
+        match self.palette_hashmap.get(item) {
             Some(id) => *id,
             None => {
-                self.pallete.push(into_byte_string(item.into()));
-                let id = self.pallete.len() - 1;
-                self.pallete_hashmap.insert(item.into(), id);
+                self.palette.push(into_byte_string(item.into()));
+                let id = self.palette.len() - 1;
+                self.palette_hashmap.insert(item.into(), id);
                 id
             },
         }

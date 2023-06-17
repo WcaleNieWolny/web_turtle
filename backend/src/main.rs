@@ -1,13 +1,11 @@
 mod turtle;
 mod database;
-mod schema;
 mod world;
 
 use std::{net::SocketAddr, sync::Arc, collections::HashMap, time::Duration, error::Error, str::FromStr};
 use axum::{Router, extract::{WebSocketUpgrade, ConnectInfo, ws::{WebSocket, Message}, State, Path, Query}, response::IntoResponse, routing::{get, put}, http::StatusCode, Json};
-use database::{SqlitePool, TurtleData, Connection, DatabaseActionError};
-use schema::MoveDirection;
-use shared::{JsonTurtle, TurtleMoveResponse, TurtleWorld, WorldBlock, JsonTurtleDirection};
+use database::DatabaseActionError;
+use shared::{JsonTurtle, TurtleMoveResponse, JsonTurtleDirection};
 use tokio::{sync::{Mutex, mpsc}, time::timeout};
 use tower_http::{trace::{TraceLayer, DefaultMakeSpan}, cors::{CorsLayer, Any}};
 use tracing::{error, warn, debug};
@@ -20,7 +18,6 @@ static GET_OS_LABEL_PAYLOAD: &str = "local ok, err = os.computerLabel() return o
 #[derive(Clone)]
 struct TurtlesState {
     turtles: Arc<Mutex<HashMap<Uuid, Turtle>>>,
-    pool: Arc<SqlitePool>
 }
 
 #[tokio::main]
@@ -33,10 +30,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let pool = database::init()?; 
     let state = TurtlesState {
         turtles: Default::default(),
-        pool: Arc::new(pool) 
     };
 
     // build our application with some routes
@@ -111,27 +106,24 @@ async fn move_turtle(
     };
 
     let direction = match command.as_str() {
-        "forward" => MoveDirection::Forward,
-        "backward" => MoveDirection::Backward,
-        "left" => MoveDirection::Left,
-        "right" => MoveDirection::Right,
+        "forward" => JsonTurtleDirection::Forward,
+        "backward" => JsonTurtleDirection::Backward,
+        "left" => JsonTurtleDirection::Left,
+        "right" => JsonTurtleDirection::Right,
         _ => return Err((StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST.to_string())),
     };
 
     turtle.move_turtle(direction).await.map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
-    let conn: Result<Connection, DatabaseActionError> = turtles.pool.clone().try_into();
-    let mut conn = conn.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Connection pool empty".to_string()))?;
+    //turtle.turtle_data.update(&mut conn).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
-    turtle.turtle_data.update(&mut conn).map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
-
-    let changes = turtle.scan_world_changes(&mut conn).await.map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    let changes = turtle.scan_world_changes().await.map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
     Ok(Json(TurtleMoveResponse {
         x: turtle.turtle_data.x,
         y: turtle.turtle_data.y,
         z: turtle.turtle_data.z,
-        rotation: turtle.turtle_data.rotation.to_json_enum(),
+        rotation: turtle.turtle_data.rotation.clone(),
         changes,
     }))
 }
@@ -151,7 +143,7 @@ async fn list_turtles(
                 x: turtle.turtle_data.x, 
                 y: turtle.turtle_data.y,
                 z: turtle.turtle_data.z,
-                rotation: turtle.turtle_data.rotation.to_json_enum(),
+                rotation: turtle.turtle_data.rotation.clone(),
             }
         })
         .collect());
@@ -166,7 +158,7 @@ async fn get_chunk(
 
     let turtle = match guard.get_mut(&uuid) {
         Some(v) => v,
-        None => return Err((StatusCode::NOT_FOUND, StatusCode::NOT_FOUND.to_string())) 
+        None => return Err::<(), _>((StatusCode::NOT_FOUND, StatusCode::NOT_FOUND.to_string())) 
     };
 
     let x = params.get("x").ok_or((StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST.to_string()))?;
@@ -175,28 +167,26 @@ async fn get_chunk(
 
     tracing::debug!("{x} {y} {z}");
 
-    let conn: Result<Connection, DatabaseActionError> = turtles.pool.clone().try_into();
-    let mut conn = conn.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Connection pool empty".to_string()))?;
+    //let blocks = turtle.get_chunk(&mut conn, *x, *y, *z).await.map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    //let world = TurtleWorld {
+    //    blocks: blocks.iter().map(|block|  {
+    //        let (r, g, b) = world::block_to_rgb(&block.name);
+    //        WorldBlock {
+    //            r,
+    //            g,
+    //            b,
+    //            x: block.x,
+    //            y: block.y,
+    //            z: block.z,
+    //        }
+    //    }).collect(),
+    //    chunk_x: *x,
+    //    chunk_y: *y,
+    //    chunk_z: *z,
+    //};
 
-    let blocks = turtle.get_chunk(&mut conn, *x, *y, *z).await.map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
-    let world = TurtleWorld {
-        blocks: blocks.iter().map(|block|  {
-            let (r, g, b) = world::block_to_rgb(&block.name);
-            WorldBlock {
-                r,
-                g,
-                b,
-                x: block.x,
-                y: block.y,
-                z: block.z,
-            }
-        }).collect(),
-        chunk_x: *x,
-        chunk_y: *y,
-        chunk_z: *z,
-    };
-
-    Ok(Json(world))
+    //Ok(Json(world))
+    Err((StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST.to_string()))
 }
 
 async fn destroy_block(
@@ -214,10 +204,7 @@ async fn destroy_block(
 
     let side = JsonTurtleDirection::from_str(&command).or(Err((StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST.to_string())))?;
 
-    let conn: Result<Connection, DatabaseActionError> = turtles.pool.clone().try_into();
-    let mut conn = conn.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Connection pool empty".to_string()))?;
-
-    match turtle.destroy_block(&mut conn, side).await {
+    match turtle.destroy_block(side).await {
         Ok(val) => return Ok(Json(val)),
         Err(err) => Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
     }
@@ -297,69 +284,31 @@ async fn handle_socket(mut socket: WebSocket, _addr: SocketAddr, turtles: Turtle
 
     let (tx, mut rx) = mpsc::channel::<TurtleAsyncRequest>(64);
 
-    //Attempt to get turtle by uuid
-    let conn: Result<Connection, DatabaseActionError> = turtles.pool.clone().try_into();
-    let mut conn = match conn {
-        Ok(val) => val,
-        Err(err) => {
-            warn!("Socket poll empty ({})", err.to_string());
-            if let Err(close_err) = socket.close().await {
-                error!("Cannot close WebSocket {close_err}") 
-            };
-            return;
-        }
-    };
+    //TODO: Attempt to get turtle by uuid
 
     let (turtle_data, uuid) = 'turtle_data: {
-        let socket_msg = send_payload!(GET_OS_LABEL_PAYLOAD);
-        let parsed_uuid = Uuid::try_parse(&socket_msg);
+        //let socket_msg = send_payload!(GET_OS_LABEL_PAYLOAD);
+        //let parsed_uuid = Uuid::try_parse(&socket_msg);
 
-        if socket_msg == "nil" || parsed_uuid.is_err() {
-            //We have a unknown turtle
-            let new_uuid = Uuid::new_v4();
-            let set_payload = format!("return os.setComputerLabel(\"{}\")", new_uuid.simple().to_string());
-            let _ = send_payload!(set_payload);
+        //We have a unknown turtle
+        let new_uuid = Uuid::new_v4();
+        let set_payload = format!("return os.setComputerLabel(\"{}\")", new_uuid.simple().to_string());
+        let _ = send_payload!(set_payload);
 
-            //Now we try to insert that uuid into the db
-            let turtle_data = TurtleData {
-                id: None,
-                uuid: new_uuid.to_string(),
-                x: 0,
-                y: 0,
-                z: 0,
-                rotation: MoveDirection::Forward,
-            };
+        //Now we try to insert that uuid into the db
+        let turtle_data = JsonTurtle {
+            id: 0,
+            uuid: new_uuid,
+            x: 0,
+            y: 0,
+            z: 0,
+            rotation: JsonTurtleDirection::Forward,
+        };
 
-           match turtle_data.put(&mut conn) {
-               Ok(val) => break 'turtle_data (val, new_uuid),
-               Err(err) => {
-                   error!("Database error {err}");
-                   close_socket!();
-                   return;
-               }
-           };
-        } else {
-            //Cannot failed, we checked for parsing error above
-            let uuid = unsafe { 
-                parsed_uuid.unwrap_unchecked()
-            };
-
-            let db_turtle_data = TurtleData::read_by_uuid(&mut conn, &uuid);
-            match db_turtle_data {
-                Ok(val) => break 'turtle_data (val, uuid),
-                Err(err) => {
-                    debug!("Database error ({err})");
-                    close_socket!();
-                    return;
-                }
-            }
-        }
+        (turtle_data, new_uuid)
     };
 
-    let turtle = Turtle {
-        request_queue: tx,
-        turtle_data
-    };
+    let turtle = Turtle::new(uuid, turtle_data, tx);
 
     //Add new turtle
     let mut guard = turtles.turtles.lock().await;
