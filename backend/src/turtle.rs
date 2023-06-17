@@ -1,7 +1,7 @@
 use std::{time::Duration, num::TryFromIntError};
 
 use serde_json::Value;
-use shared::{JsonTurtleDirection, WorldChange, WorldChangeAction, WorldChangeDeleteBlock, TurtleBlock, WorldChangeUpdateBlock, WorldChangeNewBlock, DestroyBlockResponse, JsonTurtle, world_structure::{TurtleWorld, TurtleVoxel, TurtleChunk}};
+use shared::{JsonTurtleDirection, WorldChange, WorldChangeAction, WorldChangeDeleteBlock, TurtleBlock, WorldChangeUpdateBlock, WorldChangeNewBlock, DestroyBlockResponse, JsonTurtle, world_structure::{TurtleWorld, TurtleVoxel, TurtleChunk, ChunkLocation}};
 use thiserror::Error;
 use tokio::{sync::{oneshot, mpsc::{self, Sender}}, time::timeout};
 use tracing::error;
@@ -51,14 +51,16 @@ pub enum TurtleWorldScanError {
     TurtleRotationError(#[from] TurtleMoveError),
     #[error("Turtle does not have ID")]
     InvalidTurtle,
-    #[error("Dynamic Error")]
+    #[error(transparent)]
     DynamicError(#[from] Box<dyn std::error::Error>),
     #[error("Corrupted world {0}")]
     CorruptedWorld(String),
     #[error("Cannot convent int types")]
     IntError(#[from] TryFromIntError),
     #[error("Unreachable reached ({0})")]
-    UnreachableReached(String)
+    UnreachableReached(String),
+    #[error(transparent)]
+    DatabaseError(#[from] DatabaseActionError)
 }
 
 #[derive(Error, Debug)]
@@ -69,14 +71,16 @@ pub enum TurtleWorldShowError {
 
 #[derive(Error, Debug)] 
 pub enum TurtleDestroyBlockError{
-    #[error("Database error")]
+    #[error(transparent)]
     DatabaseError(#[from] DatabaseActionError),
     #[error("Request error")]
     RequestError(#[from] TurtleRequestError),
     #[error("Unexpected response ({0})")]
     UnexpectedResponse(String),
     #[error("Not yet implemented")]
-    NotImplemented
+    NotImplemented,
+    #[error(transparent)]
+    DynamicError(#[from] Box<dyn std::error::Error>),
 }
 
 #[derive(Error, Debug)]
@@ -96,23 +100,16 @@ pub struct TurtleAsyncRequest {
 
 #[derive(Debug)]
 pub struct Turtle {
-    pub request_queue: mpsc::Sender<TurtleAsyncRequest>,
-    pub turtle_data: JsonTurtle,
-    pub world: TurtleWorld,
-    database: TurtleDatabase
+    request_queue: mpsc::Sender<TurtleAsyncRequest>,
+    pub database: TurtleDatabase
 }
 
 impl Turtle {
 
-    pub fn new(uuid: Uuid, data: JsonTurtle, tx: Sender<TurtleAsyncRequest>) -> Self {
-        let db = TurtleDatabase::new_from_id(uuid).expect("DB err");
-
-        todo!();
+    pub fn new(uuid: Uuid, database: TurtleDatabase, tx: Sender<TurtleAsyncRequest>) -> Self {
         Self {
             request_queue: tx,
-            turtle_data: data,
-            world: todo!(),
-            database: todo!(),
+            database,
         }
     }
 
@@ -150,13 +147,13 @@ impl Turtle {
             "true" => {
                 match direction {
                     JsonTurtleDirection::Right | JsonTurtleDirection::Left => {
-                        self.turtle_data.rotation.rotate_self(&direction); 
+                        self.database.turtle_data.rotation.rotate_self(&direction); 
                     },
                     direction => {
-                        let (x_diff, y_diff, z_diff) = direction.to_turtle_move_diff(&self.turtle_data.rotation);
-                        self.turtle_data.x += x_diff;
-                        self.turtle_data.y += y_diff;
-                        self.turtle_data.z += z_diff;
+                        let (x_diff, y_diff, z_diff) = direction.to_turtle_move_diff(&self.database.turtle_data.rotation);
+                        self.database.turtle_data.x += x_diff;
+                        self.database.turtle_data.y += y_diff;
+                        self.database.turtle_data.z += z_diff;
                     }
                 };
                 return Ok(()); 
@@ -167,14 +164,14 @@ impl Turtle {
     }
 
     pub async fn scan_world_changes(&mut self) -> Result<Vec<WorldChange>, TurtleWorldScanError> {
-        let x = self.turtle_data.x;
-        let y = self.turtle_data.y;
-        let z = self.turtle_data.z;
+        let x = self.database.turtle_data.x;
+        let y = self.database.turtle_data.y;
+        let z = self.database.turtle_data.z;
 
         let blocks: Vec<(String, i32, i32, i32)> = vec![
             (self.command(INSPECT_DOWN_PAYLOAD).await?, x, y - 1, z),
             {
-                let (x_diff, y_diff, z_diff) = JsonTurtleDirection::Forward.to_turtle_move_diff(&self.turtle_data.rotation);
+                let (x_diff, y_diff, z_diff) = JsonTurtleDirection::Forward.to_turtle_move_diff(&self.database.turtle_data.rotation);
                 let forward = self.command(INSPECT_FORWARD_PAYLOAD).await?;
                 (forward, x + x_diff, y + y_diff, z + z_diff)
             },
@@ -186,7 +183,7 @@ impl Turtle {
             .map(|(block, x, y, z)| {
                 let (loc, local_x, local_y, local_z) = TurtleWorld::get_chunk_loc_from_global_xyz(x, y, z)?;
               
-                let (palette, chunks) = self.world.get_fields_mut();
+                let (palette, chunks) = self.database.world.get_fields_mut();
                 let chunk = chunks.get_mut_chunk_by_loc(&loc);
                 let db_block: Result<Option<&mut TurtleVoxel>, TurtleWorldScanError> = match chunk {
                     None => Ok(None),
@@ -227,8 +224,6 @@ impl Turtle {
                         let pallete_id = palette.get_pallete_index(&name);
                         db_block.id = pallete_id.try_into()?;
 
-                        //TODO: SAVE
-                        //db_block.update(connection)?;
                         WorldChangeAction::Update(WorldChangeUpdateBlock {
                             color,
                         })
@@ -236,9 +231,14 @@ impl Turtle {
                         }
                     _ => {
                         let pallete_id: u16 = palette.get_pallete_index(&name).try_into()?;
-                        let voxel = TurtleVoxel::id(pallete_id);
 
                         //TODO: Get chunks and set new voxel
+                        let chunk = chunks.force_get_mut_chunk_by_loc(&loc);
+                        chunk.update_voxel_by_global_xyz(x, y, z, |voxel| {
+                            voxel.id = pallete_id;
+                            Ok(())
+                        })?;
+
                         let color = world::block_to_rgb(&block);
                         WorldChangeAction::New(WorldChangeNewBlock {
                             r: color.0,
@@ -251,13 +251,16 @@ impl Turtle {
                 Ok(Some(WorldChange { x, y, z, action }))
             })
             .filter_map(Result::transpose)
-            .collect::<Result<Vec<WorldChange>, TurtleWorldScanError>>()?;       
+            .collect::<Result<Vec<WorldChange>, TurtleWorldScanError>>()?;
+
+        if changes.len() != 0 {
+            self.database.save().await?;
+        }
 
         Ok(changes)
     }
 
     pub async fn destroy_block(&mut self, side: JsonTurtleDirection) -> Result<DestroyBlockResponse, TurtleDestroyBlockError> {
-        unreachable!();
         let payload = match side {
             JsonTurtleDirection::Forward => DESTROY_BLOCK_FRONT,
             _ => return Err(TurtleDestroyBlockError::NotImplemented)
@@ -267,10 +270,21 @@ impl Turtle {
 
         match response.as_str() {
             "true" => {
-                let (x_diff, y_dif, z_diff) = side.to_turtle_move_diff(&self.turtle_data.rotation.into());
-                let (x, y, z) = (self.turtle_data.x + x_diff, self.turtle_data.y + y_dif, self.turtle_data.z + z_diff);
+                let (x_diff, y_dif, z_diff) = side.to_turtle_move_diff(&self.database.turtle_data.rotation);
+                let (x, y, z) = (self.database.turtle_data.x + x_diff, self.database.turtle_data.y + y_dif, self.database.turtle_data.z + z_diff);
 
                 //BlockData::delete_by_xyz(connection, x, y, z)?;
+                let (_, world) = self.database.world.get_fields_mut();
+                let (loc, _, _, _) = TurtleWorld::get_chunk_loc_from_global_xyz(x, y, z)?;
+
+                let chunk = world.force_get_mut_chunk_by_loc(&loc);
+                chunk.update_voxel_by_global_xyz(x, y, z, |voxel| {
+                    voxel.id = 0;
+                    Ok(())
+                })?;
+
+                self.database.save().await?;
+
                 return Ok(DestroyBlockResponse {
                     change: Some(WorldChange {
                         x,

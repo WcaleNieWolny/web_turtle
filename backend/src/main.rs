@@ -120,10 +120,10 @@ async fn move_turtle(
     let changes = turtle.scan_world_changes().await.map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
     Ok(Json(TurtleMoveResponse {
-        x: turtle.turtle_data.x,
-        y: turtle.turtle_data.y,
-        z: turtle.turtle_data.z,
-        rotation: turtle.turtle_data.rotation.clone(),
+        x: turtle.database.turtle_data.x,
+        y: turtle.database.turtle_data.y,
+        z: turtle.database.turtle_data.z,
+        rotation: turtle.database.turtle_data.rotation.clone(),
         changes,
     }))
 }
@@ -138,12 +138,11 @@ async fn list_turtles(
         .enumerate()
         .map(|(id, (uuid, turtle))| {
             JsonTurtle {
-                id,
                 uuid: *uuid,
-                x: turtle.turtle_data.x, 
-                y: turtle.turtle_data.y,
-                z: turtle.turtle_data.z,
-                rotation: turtle.turtle_data.rotation.clone(),
+                x: turtle.database.turtle_data.x, 
+                y: turtle.database.turtle_data.y,
+                z: turtle.database.turtle_data.z,
+                rotation: turtle.database.turtle_data.rotation.clone(),
             }
         })
         .collect());
@@ -286,32 +285,31 @@ async fn handle_socket(mut socket: WebSocket, _addr: SocketAddr, turtles: Turtle
 
     //TODO: Attempt to get turtle by uuid
 
-    let (turtle_data, uuid) = 'turtle_data: {
-        //let socket_msg = send_payload!(GET_OS_LABEL_PAYLOAD);
-        //let parsed_uuid = Uuid::try_parse(&socket_msg);
+    let uuid = 'turtle_data: {
+        let socket_msg = send_payload!(GET_OS_LABEL_PAYLOAD);
+        let parsed_uuid = Uuid::try_parse(&socket_msg);
 
-        //We have a unknown turtle
-        let new_uuid = Uuid::new_v4();
-        let set_payload = format!("return os.setComputerLabel(\"{}\")", new_uuid.simple().to_string());
-        let _ = send_payload!(set_payload);
+        if socket_msg == "nil" || parsed_uuid.is_err() {
+            //We have a unknown turtle
+            let new_uuid = Uuid::new_v4();
+            let set_payload = format!("return os.setComputerLabel(\"{}\")", new_uuid.simple().to_string());
+            let _ = send_payload!(set_payload);
 
-        //Now we try to insert that uuid into the db
-        let turtle_data = JsonTurtle {
-            id: 0,
-            uuid: new_uuid,
-            x: 0,
-            y: 0,
-            z: 0,
-            rotation: JsonTurtleDirection::Forward,
-        };
-
-        (turtle_data, new_uuid)
+            new_uuid
+        } else {
+             
+        }
     };
 
-    let turtle = Turtle::new(uuid, turtle_data, tx);
+    let turtle = Turtle::new(uuid, tx);
 
     //Add new turtle
     let mut guard = turtles.turtles.lock().await;
+    if let Some(_) = guard.get(&uuid) {
+        warn!("Turtle overwrite attempt");
+        close_socket!();
+    }
+
     guard.insert(uuid.clone(), turtle);
     drop(guard);
 

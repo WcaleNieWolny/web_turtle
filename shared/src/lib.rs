@@ -119,7 +119,6 @@ impl JsonTurtleDirection {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct JsonTurtle {
-    pub id: usize,
     pub uuid: Uuid, 
     pub x: i32,
     pub y: i32,

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::{Hasher, Hash, BuildHasher}, error::Error};
+use std::{collections::{HashMap, hash_map::ValuesMut}, hash::{Hasher, Hash, BuildHasher}, error::Error};
 
 use bytes::{Bytes, BytesMut, BufMut, Buf};
 use bytestring::ByteString;
@@ -81,11 +81,6 @@ impl TurtleVoxel {
 }
 
 impl TurtleChunk {
-    fn get_global_block_xyz(&self, x: i32, y: i32, z: i32) -> TurtleVoxel {
-        let (x, y, z) = self.location.global_xyz_to_local(x, y, z).expect("Global XYZ -> local XYZ conv failed");
-        return self.data[ChunkShape::linearize([x + 1, y + 1, z + 1]) as usize]
-    }
-
     pub fn get_mut_block_by_local_xyz(&mut self, x: u32, y: u32, z: u32) -> Option<&mut TurtleVoxel> {
         return self.data.get_mut(ChunkShape::linearize([x + 1, y + 1, z + 1]) as usize);
     }
@@ -284,6 +279,14 @@ impl TurtleWorldData {
     pub fn get_mut_chunk_by_loc(&mut self, loc: &ChunkLocation) -> Option<&mut TurtleChunk> {
         self.chunks.get_mut(loc)
     }
+
+    pub fn force_get_mut_chunk_by_loc(&mut self, loc: &ChunkLocation) -> &mut TurtleChunk {
+        match self.chunks.get_mut(loc) {
+            Some(val) => val,
+            _ => todo!()
+        }
+    }
+
     pub fn remove_global_block_by_xyz(&mut self, x: i32, y: i32, z: i32) -> Result<(), Box<dyn Error>> {
         let chunk_y: i8 = (y << 4).try_into()?;
 
