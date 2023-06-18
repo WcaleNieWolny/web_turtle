@@ -1,11 +1,12 @@
 use bevy::render::mesh::{MeshVertexAttribute, Indices};
 use bevy::render::render_resource::{PrimitiveTopology, VertexFormat};
 use bevy::{prelude::*, pbr::wireframe::Wireframe};
+use bytes::Bytes;
 use futures::channel::mpsc::{channel, Receiver, Sender};
-use shared::{JsonTurtle, TurtleWorld};
+use gloo_net::http::Request;
+use shared::world_structure::TurtleWorld;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
-use web_sys::{Request, RequestInit, Response};
 use block_mesh::ndshape::{ConstShape, ConstShape3u32};
 use block_mesh::{greedy_quads, GreedyQuadsBuffer, MergeVoxel, Voxel, VoxelVisibility, RIGHT_HANDED_Y_UP_CONFIG};
 
@@ -76,67 +77,7 @@ fn recive_all_new_world(
                 Some(world) => {
                     match world {
                         Some(world) => {
-                            //chunk_x, chunk_z >> 4 = down left corner 
-                            let mut voxels = [EMPTY; ChunkShape::SIZE as usize];
-
-                            //down left corner
-                            let (chunk_top_x, chunk_top_z) = (world.chunk_x << 4, world.chunk_z << 4);
-                            log::warn!("corner {chunk_top_x} {chunk_top_z}");
-
-                            for block in &world.blocks {
-                                let (x, y, z) = ((block.x - chunk_top_x).abs() as u32, (block.y - (world.chunk_y << 4)) as u32, (block.z - chunk_top_z).abs() as u32);
-
-                                log::warn!("{x} {y} {z}");
-                                //this is the right down voxel
-
-                                voxels[ChunkShape::linearize([x + 1, y + 1, z + 1]) as usize] = FULL;
-                            }
-
-                            let faces = RIGHT_HANDED_Y_UP_CONFIG.faces;
-
-                            log::warn!("Faces: {faces:?}");
-
-                            let samples = voxels;
-                            let mut buffer = GreedyQuadsBuffer::new(samples.len());
-                            greedy_quads(
-                                &samples,
-                                &ChunkShape {},
-                                [0; 3],
-                                [17; 3],
-                                &faces,
-                                &mut buffer,
-                            );
-                            let num_indices = buffer.quads.num_quads() * 6;
-                            let num_vertices = buffer.quads.num_quads() * 4;
-                            let mut indices = Vec::with_capacity(num_indices);
-                            let mut positions = Vec::with_capacity(num_vertices);
-                            let mut normals = Vec::with_capacity(num_vertices);
-                            for (group, face) in buffer.quads.groups.into_iter().zip(faces.into_iter()) {
-                                for quad in group.into_iter() {
-                                    indices.extend_from_slice(&face.quad_mesh_indices(positions.len() as u32));
-                                    positions.extend_from_slice(&face.quad_mesh_positions(&quad, 1.0));
-                                    normals.extend_from_slice(&face.quad_mesh_normals());
-                                }
-                            }
-
-                            let mut render_mesh = Mesh::new(PrimitiveTopology::TriangleList);
-
-                            render_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-                            render_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-                            render_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0; 2]; num_vertices]);
-                            render_mesh.set_indices(Some(Indices::U32(indices.clone())));
-
-                            let mesh = meshes.add(render_mesh);
-
-                        let mut material = StandardMaterial::from(Color::rgb(0.0, 0.0, 0.0));
-                        material.perceptual_roughness = 0.9;
-
-                        commands.spawn(PbrBundle {
-                            mesh,
-                            material: materials.add(material),
-                            transform: Transform::from_xyz(chunk_top_x as f32, (world.chunk_y * 16) as f32, (chunk_top_z) as f32),
-                            ..Default::default()
-                        });
+                            log::warn!("New world: {world:?}")
                         }
                         None => return, //Something went wrong
                     }
@@ -170,39 +111,42 @@ fn turtle_change_listener(
                 let mut tx = global_world.get_all_blocks_tx.clone();
 
                 //-1 becouse idk yet
-                let (chunk_x, chunk_y, chunk_z) = (new_turtle.x >> 4, (new_turtle.y >> 4) - 1, new_turtle.z >> 4);
+                //let (chunk_x, chunk_y, chunk_z) = (new_turtle.x >> 4, (new_turtle.y >> 4) - 1, new_turtle.z >> 4);
 
                 spawn_local(async move {
-                    let window = web_sys::window().expect("no global `window` exists");
+                    let url = format!("/turtle/{uuid}/world/");
 
-                    let url = format!("/turtle/{uuid}/chunk/?x={chunk_x}&y={chunk_y}&z={chunk_z}");
+                    let resp = Request::get(&url)
+                        .send()
+                        .await;
 
-                    let mut opts = RequestInit::new();
-                    opts.method("GET");
+                    match resp {
+                        Ok(response) => {
+                            let bytes_vec: Bytes = match response.binary().await {
+                                Ok(val) => val.into(),
+                                Err(err) => {
+                                    log::error!("Something went wrong when converting response into bytes. Error: {err}");
+                                    tx.try_send(None).expect("Cannot send world result");
+                                    return;
+                                }
+                            };
 
-                    let request = Request::new_with_str_and_init(&url, &opts)
-                        .expect("Cannot create new request");
-                    let resp_value = JsFuture::from(window.fetch_with_request(&request))
-                        .await
-                        .expect("Cannot fetch value");
+                            let world = match TurtleWorld::from_bytes(bytes_vec) {
+                                Ok(val) => val,
+                                Err(err) => {
+                                    log::error!("Cannot convert backend response into world. Error: {err}");
+                                    tx.try_send(None).expect("Cannot send world result");
+                                    return;
+                                }
+                            };
 
-                    assert!(resp_value.is_instance_of::<Response>());
-                    let resp: Response = resp_value.dyn_into().expect("Cannot cast into response");
-
-                    if resp.status() != 200 {
-                        log::error!("Something went bad! (world) :<");
-                        tx.try_send(None)
-                            .expect("Cannot notify bevy world system (Err)");
-                        return;
+                            tx.try_send(Some(world)).expect("Cannot pass world into bevy system");
+                        },
+                        Err(err) => {
+                            log::error!("Something went wrong when fetching world. Error: {err}");
+                            tx.try_send(None).expect("Cannot send world result");
+                        },
                     }
-
-                    let json = JsFuture::from(resp.json().expect("Cannot get json"))
-                        .await
-                        .expect("Cannot get future from JS");
-                    let result: TurtleWorld =
-                        serde_wasm_bindgen::from_value(json).expect("Json serde error");
-                    tx.try_send(Some(result))
-                        .expect("Cannot notify bevy move system (Ok)");
                 })
             }
             None => {}

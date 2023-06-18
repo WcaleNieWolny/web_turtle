@@ -21,6 +21,8 @@ bevy_mod_raycast = "0.8.0"
 bevy_egui = "0.20.3"
 gloo-net = { version =  "0.2.6", features = ["http", "json"] }
 block-mesh = "0.2.0"
+bytes = "1"
+uuid = { version = "1", features = ["v4"] }
 
 #    this.chunk.x = this.block.x >> 4;     this.chunk.y = this.block.y >> 4;     this.chunk.z = this.block.z >> 4; 
 

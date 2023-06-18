@@ -3,7 +3,8 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use bevy::prelude::*;
+use uuid::Uuid;
+use bevy::{prelude::*, utils::HashMap};
 use shared::JsonTurtle;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{spawn_local, JsFuture};
@@ -12,7 +13,7 @@ use web_sys::{HtmlElement, MouseEvent, PointerEvent, Request, RequestInit, Respo
 use crate::SelectTurtleEvent;
 
 static mut MAIN_TURTLE: Option<Arc<RwLock<Option<JsonTurtle>>>> = None;
-static mut TURTLE_VEC: Option<Arc<RwLock<Vec<JsonTurtle>>>> = None;
+static mut TURTLE_VEC: Option<Arc<RwLock<HashMap<Uuid, JsonTurtle>>>> = None;
 static mut ON_CLICK_CLOSURE: Option<JsValue> = None;
 
 #[derive(Resource)]
@@ -35,7 +36,7 @@ impl Deref for MainTurtle {
 
 fn setup_ui_system(mut commands: Commands) {
     let main_turtle: Arc<RwLock<Option<JsonTurtle>>> = Arc::new(RwLock::new(None));
-    let turtle_vec: Arc<RwLock<Vec<JsonTurtle>>> = Arc::new(RwLock::new(Vec::new()));
+    let turtle_vec: Arc<RwLock<HashMap<Uuid, JsonTurtle>>> = Arc::new(RwLock::new(HashMap::new()));
     //Again, do not care about unsafe :)
     unsafe {
         MAIN_TURTLE = Some(main_turtle.clone());
@@ -51,8 +52,7 @@ fn setup_ui_system(mut commands: Commands) {
         let id = target
             .get_attribute("data-id")
             .expect("No ID atribute, THE USER IS A HACKER, NOT COOL BRO!!!!!!!!!");
-        let id = id
-            .parse::<usize>()
+        let id = Uuid::try_parse(&id)
             .expect("Invalid UUID, THE USER HAS TAMPERED WITH THE UUID!!!!!");
 
         let global_turtle_vec = unsafe { TURTLE_VEC.as_mut().unwrap_unchecked() };
@@ -68,7 +68,7 @@ fn setup_ui_system(mut commands: Commands) {
             let window = web_sys::window().expect("no global `window` exists");
             let document = window.document().expect("should have a document on window");
             let other_turtle_element = document
-                .query_selector(&format!("[data-id=\"{}\"]", other_turtle.id))
+                .query_selector(&format!("[data-id=\"{}\"]", other_turtle.uuid))
                 .expect("Query select error")
                 .expect("The previous main turtle element was removed");
             let other_turtle_element_parrent = other_turtle_element
@@ -77,14 +77,9 @@ fn setup_ui_system(mut commands: Commands) {
             other_turtle_element_parrent.set_class_name("navbar_item_div"); //Remove border
         }
 
-        if id >= global_turtles_guard.len() {
-            log::error!("DO NOT FUCKING TRY TO HACK MY APP!!!!!!!!!!!!!");
-            return;
-        };
-
         parrent_element.set_class_name("navbar_item_div green-border");
 
-        let new_global_turtle = global_turtles_guard[id].clone();
+        let new_global_turtle = global_turtles_guard[&id].clone();
         *main_turtle_guard = Some(new_global_turtle);
 
         //Here we will write into MAIN_TURTLE static (This is something to be implemented)
@@ -128,7 +123,7 @@ fn setup_ui_system(mut commands: Commands) {
 
 async fn update_turtle_list(
     main_turtle: &Arc<RwLock<Option<JsonTurtle>>>,
-    global_turtle_vec: &Arc<RwLock<Vec<JsonTurtle>>>,
+    global_turtle_vec: &Arc<RwLock<HashMap<Uuid, JsonTurtle>>>,
 ) {
     let window = web_sys::window().expect("no global `window` exists");
     let document = window.document().expect("should have a document on window");
@@ -158,12 +153,11 @@ async fn update_turtle_list(
 
     global_turtles_guard
         .iter()
-        .enumerate()
         .skip(turtle_list.len())
-        .for_each(|(i, _)| {
+        .for_each(|(uuid, _)| {
             //Here we remove, as it no longer exists
             let text_to_remove = match document
-                .query_selector(&format!("[data-id=\"{i}\"]"))
+                .query_selector(&format!("[data-id=\"{:?}\"]", uuid))
                 .expect("Query select error")
             {
                 Some(val) => val,
@@ -179,8 +173,8 @@ async fn update_turtle_list(
                 .expect("Couldn't remove node from navbar");
         });
 
-    for (i, turtle) in turtle_list.iter().enumerate() {
-        if let Some(global_turtle) = global_turtles_guard.get_mut(i) {
+    for (_, turtle) in turtle_list.iter().enumerate() {
+        if let Some(global_turtle) = global_turtles_guard.get_mut(&turtle.uuid) {
             if global_turtle == turtle {
                 continue;
             } else {
@@ -201,7 +195,7 @@ async fn update_turtle_list(
             .add_event_listener_with_callback("pointerdown", on_click_closure.unchecked_ref())
             .expect("Cannot set event listener");
         turtle_navbar_text
-            .set_attribute("data-id", &i.to_string())
+            .set_attribute("data-id", &turtle.uuid.to_string())
             .expect("Cannot set uuid atribute");
 
         turtle_navbar_div
