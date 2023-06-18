@@ -28,8 +28,7 @@ pub enum DatabaseActionError {
     #[error("Cannot convert int types")]
     IntError(#[from] TryFromIntError),
     #[error(transparent)]
-    DynamicError(#[from] Box<dyn std::error::Error>),
-
+    DynamicError(#[from] Box<dyn std::error::Error + Send + Sync>),
 }
 
 #[derive(Debug)]
@@ -44,8 +43,8 @@ pub struct TurtleDatabase {
 impl TurtleDatabase {
     pub async fn create_from_id(id: Uuid) -> Result<Self, DatabaseActionError> {
         let mut path = DATA_DIR.clone();
+        path.push(id.simple().to_string());
 
-        let new_file = path.push(id.simple().to_string());
         let json_file_path = path.with_extension("json");
         let world_file_path = path.with_extension("world");
      
@@ -89,13 +88,17 @@ impl TurtleDatabase {
             TurtleWorld::from_bytes(bytes.freeze())?
         };
 
-        let database = Self {
+        let mut database = Self {
             world_file,
             json_file,
             raw_world_bytes: turtle_world.to_bytes()?,
             turtle_data: json_turtle,
             world: turtle_world
         };
+
+        if json_len == 0 && world_len == 0 {
+            database.save().await?;
+        }
 
         Ok(database)
     }
@@ -113,5 +116,9 @@ impl TurtleDatabase {
         self.json_file.write_all(json_str.as_bytes()).await?;
 
         Ok(())
+    }
+
+    pub fn raw_world(&self) -> Bytes {
+        self.raw_world_bytes.clone()
     }
 }

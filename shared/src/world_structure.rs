@@ -56,7 +56,7 @@ impl ChunkLocation {
 
     ///Padding is left to individual functions
     #[inline(always)]
-    fn global_xyz_to_local(&self, x: i32, y: i32, z: i32) -> Result<(u32, u32, u32), Box<dyn Error>> {
+    fn global_xyz_to_local(&self, x: i32, y: i32, z: i32) -> Result<(u32, u32, u32), Box<dyn Error + Send + Sync>> {
         let (chunk_top_x, chunk_top_z) = (self.x << 4, self.z << 4);
 
         //These are local chunk XYZ
@@ -85,7 +85,7 @@ impl TurtleChunk {
         return self.data.get_mut(ChunkShape::linearize([x + 1, y + 1, z + 1]) as usize);
     }
 
-    pub fn remove_by_global_xyz(&mut self, x: i32, y: i32, z: i32) -> Result<(), Box<dyn Error>> {
+    pub fn remove_by_global_xyz(&mut self, x: i32, y: i32, z: i32) -> Result<(), Box<dyn Error + Send + Sync>> {
         return self.update_voxel_by_global_xyz(x, y, z, |voxel| {
             if voxel.id == 0 {
                 return Err("Given block is already air".into());
@@ -95,8 +95,8 @@ impl TurtleChunk {
         });
     }
 
-    pub fn update_voxel_by_global_xyz<F>(&mut self, x: i32, y: i32, z: i32, mut func: F) -> Result<(), Box<dyn Error>> 
-        where F: FnMut(&mut TurtleVoxel) -> Result<(), Box<dyn Error>>{
+    pub fn update_voxel_by_global_xyz<F>(&mut self, x: i32, y: i32, z: i32, mut func: F) -> Result<(), Box<dyn Error + Send + Sync>> 
+        where F: FnMut(&mut TurtleVoxel) -> Result<(), Box<dyn Error + Send + Sync>>{
 
         let (x, y, z) = self.location.global_xyz_to_local(x, y, z)?;
         let data = self.data.get_mut(ChunkShape::linearize([(x + 1).try_into()?, (y + 1).try_into()?, (z + 1).try_into()?]) as usize).ok_or::<String>("Something went really wrong, linearize is out of bounds".into())?;
@@ -115,7 +115,7 @@ impl TurtleWorld {
         }
     }
 
-    pub fn to_bytes(&self) -> Result<Bytes, Box<dyn Error>> {
+    pub fn to_bytes(&self) -> Result<Bytes, Box<dyn Error + Send + Sync>> {
         let mut bytes = BytesMut::new();
 
         macro_rules! write_usize {
@@ -161,7 +161,7 @@ impl TurtleWorld {
         Ok(bytes.freeze())
     }
 
-    pub fn from_bytes(mut bytes: Bytes) -> Result<Self, Box<dyn Error>>{
+    pub fn from_bytes(mut bytes: Bytes) -> Result<Self, Box<dyn Error + Send + Sync>>{
 
         macro_rules! safe_assert {
             ($cond:expr) => {
@@ -257,7 +257,7 @@ impl TurtleWorld {
         })
     }
 
-    pub fn get_chunk_loc_from_global_xyz(x: i32, y: i32, z: i32) -> Result<(ChunkLocation, u32, u32, u32), Box<dyn Error>> {
+    pub fn get_chunk_loc_from_global_xyz(x: i32, y: i32, z: i32) -> Result<(ChunkLocation, u32, u32, u32), Box<dyn Error + Send + Sync>> {
         let chunk_y: i8 = match (y << 4).try_into().ok() {
             Some(val) => val,
             None => return Err("Cannot do chunk loc convertion".into())
@@ -287,7 +287,7 @@ impl TurtleWorldData {
         }
     }
 
-    pub fn remove_global_block_by_xyz(&mut self, x: i32, y: i32, z: i32) -> Result<(), Box<dyn Error>> {
+    pub fn remove_global_block_by_xyz(&mut self, x: i32, y: i32, z: i32) -> Result<(), Box<dyn Error + Send + Sync>> {
         let chunk_y: i8 = (y << 4).try_into()?;
 
         let (chunk_x, chunk_z) = (x << 4, z << 4);

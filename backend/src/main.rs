@@ -13,6 +13,8 @@ use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, util::Subs
 use turtle::{Turtle, TurtleRequestError, TurtleAsyncRequest};
 use uuid::Uuid;
 
+use crate::database::TurtleDatabase;
+
 static GET_OS_LABEL_PAYLOAD: &str = "local ok, err = os.computerLabel() return ok";
 
 #[derive(Clone)]
@@ -40,7 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .route("/turtle/:id/command/", put(command_turtle))
         .route("/turtle/:id/move/", put(move_turtle))
         .route("/turtle/list/", get(list_turtles))
-        .route("/turtle/:id/chunk/", get(get_chunk))
+        .route("/turtle/:id/world/", get(get_world))
         .route("/turtle/:id/destroy/", put(destroy_block))
         .route("/turtle/:id/inventory/", get(get_inventory))
         // logging so we can see whats going on
@@ -148,7 +150,7 @@ async fn list_turtles(
         .collect());
 }
 
-async fn get_chunk(
+async fn get_world(
     State(turtles): State<TurtlesState>,
     Path(uuid): Path<Uuid>,
     Query(params): Query<HashMap<String, i32>>
@@ -157,35 +159,11 @@ async fn get_chunk(
 
     let turtle = match guard.get_mut(&uuid) {
         Some(v) => v,
-        None => return Err::<(), _>((StatusCode::NOT_FOUND, StatusCode::NOT_FOUND.to_string())) 
+        None => return Err((StatusCode::NOT_FOUND, StatusCode::NOT_FOUND.to_string())) 
     };
 
-    let x = params.get("x").ok_or((StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST.to_string()))?;
-    let y = params.get("y").ok_or((StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST.to_string()))?;
-    let z = params.get("z").ok_or((StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST.to_string()))?;
-
-    tracing::debug!("{x} {y} {z}");
-
-    //let blocks = turtle.get_chunk(&mut conn, *x, *y, *z).await.map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
-    //let world = TurtleWorld {
-    //    blocks: blocks.iter().map(|block|  {
-    //        let (r, g, b) = world::block_to_rgb(&block.name);
-    //        WorldBlock {
-    //            r,
-    //            g,
-    //            b,
-    //            x: block.x,
-    //            y: block.y,
-    //            z: block.z,
-    //        }
-    //    }).collect(),
-    //    chunk_x: *x,
-    //    chunk_y: *y,
-    //    chunk_z: *z,
-    //};
-
-    //Ok(Json(world))
-    Err((StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST.to_string()))
+    let world = turtle.database.raw_world();
+    Ok(world)
 }
 
 async fn destroy_block(
@@ -285,7 +263,7 @@ async fn handle_socket(mut socket: WebSocket, _addr: SocketAddr, turtles: Turtle
 
     //TODO: Attempt to get turtle by uuid
 
-    let uuid = 'turtle_data: {
+    let uuid = {
         let socket_msg = send_payload!(GET_OS_LABEL_PAYLOAD);
         let parsed_uuid = Uuid::try_parse(&socket_msg);
 
@@ -297,17 +275,27 @@ async fn handle_socket(mut socket: WebSocket, _addr: SocketAddr, turtles: Turtle
 
             new_uuid
         } else {
-             
+            parsed_uuid.unwrap()
         }
     };
 
-    let turtle = Turtle::new(uuid, tx);
+    let database = match TurtleDatabase::create_from_id(uuid).await {
+        Ok(val) => val,
+        Err(err) => {
+            error!("Database error for turtle {uuid:?} Err: {err}");
+            close_socket!();
+            return;
+        }
+    };
+
+    let turtle = Turtle::new(uuid, database, tx);
 
     //Add new turtle
     let mut guard = turtles.turtles.lock().await;
     if let Some(_) = guard.get(&uuid) {
         warn!("Turtle overwrite attempt");
         close_socket!();
+        return;
     }
 
     guard.insert(uuid.clone(), turtle);

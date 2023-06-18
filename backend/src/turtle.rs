@@ -52,7 +52,7 @@ pub enum TurtleWorldScanError {
     #[error("Turtle does not have ID")]
     InvalidTurtle,
     #[error(transparent)]
-    DynamicError(#[from] Box<dyn std::error::Error>),
+    DynamicError(#[from] Box<dyn std::error::Error + Send + Sync>),
     #[error("Corrupted world {0}")]
     CorruptedWorld(String),
     #[error("Cannot convent int types")]
@@ -80,7 +80,7 @@ pub enum TurtleDestroyBlockError{
     #[error("Not yet implemented")]
     NotImplemented,
     #[error(transparent)]
-    DynamicError(#[from] Box<dyn std::error::Error>),
+    DynamicError(#[from] Box<dyn std::error::Error + Send + Sync>),
 }
 
 #[derive(Error, Debug)]
