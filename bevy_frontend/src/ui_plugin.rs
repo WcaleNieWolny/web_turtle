@@ -173,7 +173,7 @@ async fn update_turtle_list(
                 .expect("Couldn't remove node from navbar");
         });
 
-    for (_, turtle) in turtle_list.iter().enumerate() {
+    for (i, turtle) in turtle_list.iter().enumerate() {
         if let Some(global_turtle) = global_turtles_guard.get_mut(&turtle.uuid) {
             if global_turtle == turtle {
                 continue;
@@ -207,7 +207,10 @@ async fn update_turtle_list(
             .expect("Cannot inseft before refresh_button");
     }
 
-    *global_turtles_guard = turtle_list.clone();
+    *global_turtles_guard = turtle_list
+        .iter()
+        .map(|item| (item.uuid, item.clone()))
+        .collect();
 }
 
 async fn get_turtles_list() -> Vec<JsonTurtle> {

@@ -60,8 +60,9 @@ impl ChunkLocation {
         let (chunk_top_x, chunk_top_z) = (self.x << 4, self.z << 4);
 
         //These are local chunk XYZ
-        let (x, y, z): (u32, u32, u32) = ((x - chunk_top_x).abs().try_into()?, (y - ((self.y as i32) << 4)).try_into()?, (z - chunk_top_z).abs().try_into()?);
+        let (x, y, z): (u32, u32, u32) = ((x - chunk_top_x).abs().try_into()?, (y - (TryInto::<i32>::try_into(self.y)? << 4)).try_into()?, (z - chunk_top_z).abs().try_into()?);
 
+        println!("XYZ {x} {y} {z}");
         Ok((x, y, z))
     }
 }
@@ -81,6 +82,13 @@ impl TurtleVoxel {
 }
 
 impl TurtleChunk {
+    fn new_by_xyz(loc: ChunkLocation) -> Self {
+        Self {
+            location: loc,
+            data: [TurtleVoxel::air(); ChunkShape::SIZE as usize]
+        }
+    }
+
     pub fn get_mut_block_by_local_xyz(&mut self, x: u32, y: u32, z: u32) -> Option<&mut TurtleVoxel> {
         return self.data.get_mut(ChunkShape::linearize([x + 1, y + 1, z + 1]) as usize);
     }
@@ -98,6 +106,7 @@ impl TurtleChunk {
     pub fn update_voxel_by_global_xyz<F>(&mut self, x: i32, y: i32, z: i32, mut func: F) -> Result<(), Box<dyn Error + Send + Sync>> 
         where F: FnMut(&mut TurtleVoxel) -> Result<(), Box<dyn Error + Send + Sync>>{
 
+        println!("Working on {:?}", self.location);
         let (x, y, z) = self.location.global_xyz_to_local(x, y, z)?;
         let data = self.data.get_mut(ChunkShape::linearize([(x + 1).try_into()?, (y + 1).try_into()?, (z + 1).try_into()?]) as usize).ok_or::<String>("Something went really wrong, linearize is out of bounds".into())?;
 
@@ -258,12 +267,12 @@ impl TurtleWorld {
     }
 
     pub fn get_chunk_loc_from_global_xyz(x: i32, y: i32, z: i32) -> Result<(ChunkLocation, u32, u32, u32), Box<dyn Error + Send + Sync>> {
-        let chunk_y: i8 = match (y << 4).try_into().ok() {
+        let chunk_y: i8 = match (y >> 4).try_into().ok() {
             Some(val) => val,
             None => return Err("Cannot do chunk loc convertion".into())
         };
 
-        let (chunk_x, chunk_z) = (x << 4, z << 4);
+        let (chunk_x, chunk_z) = (x >> 4, z >> 4);
         let chunk_loc = ChunkLocation::xyz(chunk_x, chunk_y, chunk_z);
         let (x, y, z) = chunk_loc.global_xyz_to_local(x, y, z)?;
         return Ok((chunk_loc, x, y, z))
@@ -281,10 +290,7 @@ impl TurtleWorldData {
     }
 
     pub fn force_get_mut_chunk_by_loc(&mut self, loc: &ChunkLocation) -> &mut TurtleChunk {
-        match self.chunks.get_mut(loc) {
-            Some(val) => val,
-            _ => todo!()
-        }
+        self.chunks.entry(loc.clone()).or_insert(TurtleChunk::new_by_xyz(loc.clone()))
     }
 
     pub fn remove_global_block_by_xyz(&mut self, x: i32, y: i32, z: i32) -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -318,7 +324,8 @@ impl TurtleWorldPalette {
 }
 
 struct DumbHasher {
-    hash: u64
+    written: u8,
+    hash: [u8; 8] 
 }
 
 #[derive(Default)]
@@ -329,20 +336,26 @@ impl BuildHasher for DumbHasherBuilder {
 
     fn build_hasher(&self) -> Self::Hasher {
         DumbHasher {
-            hash: 0
+            written: 0,
+            hash: [0; 8]
         }
     }
 }
 
 impl Hasher for DumbHasher {
     fn finish(&self) -> u64 {
-        self.hash 
+        u64::from_le_bytes(self.hash) 
     }
 
     fn write(&mut self, bytes: &[u8]) {
-        assert!(bytes.len() == 8);
-        let bytes: [u8; 8] = bytes.try_into().unwrap();
-        self.hash = u64::from_le_bytes(bytes)
+        for byte in bytes {
+            if self.written == 8 {
+                self.written = 0;
+                self.hash = [0; 8];
+            }
+            self.hash[self.written as usize] = *byte;
+            self.written += 1; 
+        }
     }
 }
 
