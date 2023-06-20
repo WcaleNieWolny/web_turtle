@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, hash_map::ValuesMut}, hash::{Hasher, Hash, BuildHasher}, error::Error};
+use std::{collections::{HashMap}, hash::{Hasher, Hash, BuildHasher}, error::Error};
 
 use bytes::{Bytes, BytesMut, BufMut, Buf};
 use bytestring::ByteString;
@@ -14,7 +14,7 @@ pub struct TurtleVoxel {
     pub id: u16
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, Hash)]
 pub struct ChunkLocation {
     pub x: i32,
     pub y: i8,
@@ -24,10 +24,10 @@ pub struct ChunkLocation {
 
 #[derive(Eq, PartialEq, Debug)]
 pub struct TurtleWorldData {
-    chunks: HashMap<ChunkLocation, TurtleChunk, DumbHasherBuilder>, 
+    chunks: HashMap<ChunkLocation, TurtleChunk>, 
 }
 
-#[derive(Eq, PartialEq, Debug, Default)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct TurtleWorldPalette {
     palette: Vec<ByteString>,
     palette_hashmap: HashMap<String, usize>, //Used to convert name of block into pallete index,
@@ -81,6 +81,17 @@ impl TurtleVoxel {
     }
 }
 
+impl Default for TurtleWorldPalette {
+    fn default() -> Self {
+        let mut palette_hashmap = HashMap::new();
+        palette_hashmap.insert("minecraft:air".to_owned(), 0);
+        Self { 
+            palette_hashmap,
+            palette: vec![ByteString::from_static("minecraft:air")]
+        }
+    }
+}
+
 impl TurtleChunk {
     fn new_by_xyz(loc: ChunkLocation) -> Self {
         Self {
@@ -119,7 +130,7 @@ impl TurtleWorld {
         Self {
             pallete: TurtleWorldPalette::default(),
             data: TurtleWorldData { 
-                chunks: HashMap::with_hasher(DumbHasherBuilder)
+                chunks: HashMap::new()
             },
         }
     }
@@ -216,7 +227,7 @@ impl TurtleWorld {
 
         assert_len!(8);
         let chunks_len = bytes.get_i64_le().try_into()?;
-        let chunks: Result<HashMap<ChunkLocation, TurtleChunk, DumbHasherBuilder>, String> = (0..chunks_len)
+        let chunks: Result<HashMap<ChunkLocation, TurtleChunk>, String> = (0..chunks_len)
             .into_iter()
             .map(|_| {
                 assert_len!(9);
@@ -302,7 +313,12 @@ impl TurtleWorldData {
         let chunk = self.chunks.get_mut(&chunk_loc).ok_or("Given block does not exist (chunk_err)".to_owned())?;
         return chunk.remove_by_global_xyz(x, y, z);
     }
+
+    pub fn iter(&self) -> std::collections::hash_map::Iter<ChunkLocation, TurtleChunk> {
+        self.chunks.iter()
+    }
 }
+
 
 impl TurtleWorldPalette {
     pub fn get_pallete_from_id(&self, id: u16) -> Option<ByteString> {
@@ -320,52 +336,6 @@ impl TurtleWorldPalette {
                 id
             },
         }
-    }
-}
-
-struct DumbHasher {
-    written: u8,
-    hash: [u8; 8] 
-}
-
-#[derive(Default)]
-struct DumbHasherBuilder;
-
-impl BuildHasher for DumbHasherBuilder {
-    type Hasher = DumbHasher;
-
-    fn build_hasher(&self) -> Self::Hasher {
-        DumbHasher {
-            written: 0,
-            hash: [0; 8]
-        }
-    }
-}
-
-impl Hasher for DumbHasher {
-    fn finish(&self) -> u64 {
-        u64::from_le_bytes(self.hash) 
-    }
-
-    fn write(&mut self, bytes: &[u8]) {
-        for byte in bytes {
-            if self.written == 8 {
-                self.written = 0;
-                self.hash = [0; 8];
-            }
-            self.hash[self.written as usize] = *byte;
-            self.written += 1; 
-        }
-    }
-}
-
-impl Hash for ChunkLocation {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let x = self.x.to_le_bytes();
-        let z = self.z.to_le_bytes();
-        let hash = [x[0], x[1], x[2], self.y as u8, 0, z[0], z[1], z[2]];
-
-        hash.hash(state);
     }
 }
 

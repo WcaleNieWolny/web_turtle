@@ -2,15 +2,17 @@ use bevy::render::mesh::{MeshVertexAttribute, Indices};
 use bevy::render::render_resource::{PrimitiveTopology, VertexFormat};
 use bevy::{prelude::*, pbr::wireframe::Wireframe};
 use bytes::Bytes;
-use futures::channel::mpsc::{channel, Receiver, Sender};
+use futures::channel::mpsc::{channel, Receiver, Sender, unbounded, UnboundedReceiver, UnboundedSender};
 use gloo_net::http::Request;
-use shared::world_structure::TurtleWorld;
+use shared::world_structure::{TurtleWorld, TurtleVoxel, ChunkLocation};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use block_mesh::ndshape::{ConstShape, ConstShape3u32};
 use block_mesh::{greedy_quads, GreedyQuadsBuffer, MergeVoxel, Voxel, VoxelVisibility, RIGHT_HANDED_Y_UP_CONFIG};
 
 use crate::{SelectTurtleEvent, WorldChangeEvent, BlockRaycastSet};
+
+static CHUNKS_PER_FRAME_CAP: usize = 4;
 
 pub struct WorldPlugin;
 
@@ -19,20 +21,25 @@ pub struct WorldPlugin;
 struct WorldBlock;
 
 #[derive(Resource)]
-struct GlobalWorld {
+struct GlobalWorldGate {
     get_all_blocks_rx: Receiver<Option<TurtleWorld>>,
     get_all_blocks_tx: Sender<Option<TurtleWorld>>,
+    chunk_load_rx: UnboundedReceiver<ChunkLocation>,
+    chunk_load_tx: UnboundedSender<ChunkLocation>,
+}
+
+#[derive(Resource)]
+struct GlobalWorld {
+    world: Option<TurtleWorld>
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
-struct BoolVoxel(bool);
-
-const EMPTY: BoolVoxel = BoolVoxel(false);
-const FULL: BoolVoxel = BoolVoxel(true);
+#[repr(transparent)]
+struct BoolVoxel(TurtleVoxel);
 
 impl Voxel for BoolVoxel {
     fn get_visibility(&self) -> VoxelVisibility {
-        if *self == EMPTY {
+        if self.0.id == 0 {
             VoxelVisibility::Empty
         } else {
             VoxelVisibility::Opaque
@@ -54,30 +61,85 @@ type ChunkShape = ConstShape3u32<18, 18, 18>;
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
         let (tx, rx) = channel::<Option<TurtleWorld>>(8);
+        let (chunk_tx, chunk_rx) = unbounded::<ChunkLocation>();
 
-        app.insert_resource(GlobalWorld {
+        app.insert_resource(GlobalWorldGate {
             get_all_blocks_rx: rx,
             get_all_blocks_tx: tx,
+            chunk_load_rx: chunk_rx,
+            chunk_load_tx: chunk_tx,
+        })
+        .insert_resource(GlobalWorld {
+            world: None
         })
         .add_system(turtle_change_listener)
         .add_system(recive_all_new_world)
-        .add_system(block_change_detect);
+        .add_system(block_change_detect)
+        .add_system(load_chunk_from_queue.after(recive_all_new_world));
+    }
+}
+
+fn load_chunk_from_queue(
+    mut global_world_gate: ResMut<GlobalWorldGate>,
+    mut global_world: ResMut<GlobalWorld>,
+) {
+    let world = match global_world.world.as_mut() {
+        Some(world) => world,
+        None => return
+    };
+
+    let (_, world_data) = world.get_fields_mut();
+
+    //We will only ever load CHUNKS_PER_FRAME_CAP chunks per 1 frame
+    let mut i = 0usize;
+
+    while let Ok(chunk_loc) = global_world_gate.chunk_load_rx.try_next() {
+        let chunk_loc = match chunk_loc {
+            Some(val) => val,
+            None => {
+                log::error!("Closed chunk_loc channel. THIS SHOULD NEVER HAPPEN!!!");
+                return;
+            }
+        };
+
+        let chunk = match world_data.get_mut_chunk_by_loc(&chunk_loc) {
+            Some(val) => val,
+            None => {
+                log::error!("Chunk {chunk_loc:?} does not exist client side");
+                return;
+            }
+        };
+
+        i += 1;
+        if i == CHUNKS_PER_FRAME_CAP {
+            return;
+        }
     }
 }
 
 fn recive_all_new_world(
+    mut global_world_gate: ResMut<GlobalWorldGate>,
     mut global_world: ResMut<GlobalWorld>,
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    match global_world.get_all_blocks_rx.try_next() {
+    match global_world_gate.get_all_blocks_rx.try_next() {
         Ok(val) => {
             match val {
                 Some(world) => {
                     match world {
-                        Some(world) => {
-                            log::warn!("New world: {world:?}")
+                        Some(mut world) => {
+                            log::warn!("New world: {world:?}");
+                            let (_, world_data) = world.get_fields_mut();
+                            let res = world_data
+                                .iter()
+                                .map(|(loc, _)| loc)
+                                .try_for_each(|loc| global_world_gate.chunk_load_tx.unbounded_send(loc.clone()));
+                                
+                            if let Err(err) = res {
+                                log::error!("Cannot send turtle chunks loc into further processing. Err: {err}");
+                                return;
+                            }
+
+                            global_world.world = Some(world);
                         }
                         None => return, //Something went wrong
                     }
@@ -95,7 +157,7 @@ fn turtle_change_listener(
     mut commands: Commands,
     mut select_turtle_reader: EventReader<SelectTurtleEvent>,
     world_blocks: Query<Entity, With<WorldBlock>>,
-    global_world: Res<GlobalWorld>,
+    global_world_gate: Res<GlobalWorldGate>,
 ) {
     for event in &mut select_turtle_reader {
         //Clean the world
@@ -108,7 +170,7 @@ fn turtle_change_listener(
         match &event.0 {
             Some(new_turtle) => {
                 let uuid = new_turtle.uuid;
-                let mut tx = global_world.get_all_blocks_tx.clone();
+                let mut tx = global_world_gate.get_all_blocks_tx.clone();
 
                 //-1 becouse idk yet
                 //let (chunk_x, chunk_y, chunk_z) = (new_turtle.x >> 4, (new_turtle.y >> 4) - 1, new_turtle.z >> 4);

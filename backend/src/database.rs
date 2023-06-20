@@ -80,18 +80,19 @@ impl TurtleDatabase {
             .await?;
 
         let world_len = world_file.metadata().await?.len();
-        let turtle_world: TurtleWorld = if world_len == 0 {
-            TurtleWorld::new()
+        let (turtle_world, turtle_bytes) = if world_len == 0 {
+            (TurtleWorld::new(), Bytes::new())
         } else {
             let mut bytes = BytesMut::with_capacity(world_len.try_into()?);
             world_file.read_buf(&mut bytes).await?;
-            TurtleWorld::from_bytes(bytes.freeze())?
+            let bytes = bytes.freeze();
+            (TurtleWorld::from_bytes(bytes.clone())?, bytes)
         };
 
         let mut database = Self {
             world_file,
             json_file,
-            raw_world_bytes: turtle_world.to_bytes()?,
+            raw_world_bytes: turtle_bytes,
             turtle_data: json_turtle,
             world: turtle_world
         };
