@@ -67,9 +67,9 @@ impl TurtleDatabase {
                 rotation: shared::JsonTurtleDirection::Forward,
             }
         } else {
-            let mut json_buf = String::new();
-            json_file.read_to_string(&mut json_buf).await?;
-            serde_json::from_str(&json_buf)?
+            let mut bytes = BytesMut::with_capacity(json_len.try_into()?);
+            json_file.read_buf(&mut bytes).await?;
+            serde_json::from_slice(&bytes)?
         };
 
         let mut world_file = OpenOptions::new()
@@ -105,7 +105,7 @@ impl TurtleDatabase {
     }
 
     pub async fn save(&mut self) -> Result<(), DatabaseActionError> {
-        let json_str = serde_json::to_string(&self.turtle_data)?;
+        let json_str = serde_json::to_vec(&self.turtle_data)?;
         let mut world_bytes = self.world.to_bytes()?;
 
         self.raw_world_bytes = world_bytes.clone();
@@ -114,7 +114,7 @@ impl TurtleDatabase {
         self.json_file.set_len(0).await?;
 
         self.world_file.write_buf(&mut world_bytes).await?;
-        self.json_file.write_all(json_str.as_bytes()).await?;
+        self.json_file.write_all(&json_str).await?;
 
         Ok(())
     }

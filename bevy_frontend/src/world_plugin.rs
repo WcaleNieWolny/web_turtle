@@ -55,6 +55,12 @@ impl MergeVoxel for BoolVoxel {
     }
 }
 
+impl From<TurtleVoxel> for BoolVoxel {
+    fn from(value: TurtleVoxel) -> Self {
+        Self(value) 
+    }
+}
+
 // A 16^3 chunk with 1-voxel boundary padding.
 type ChunkShape = ConstShape3u32<18, 18, 18>;
 
@@ -82,6 +88,9 @@ impl Plugin for WorldPlugin {
 fn load_chunk_from_queue(
     mut global_world_gate: ResMut<GlobalWorldGate>,
     mut global_world: ResMut<GlobalWorld>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut commands: Commands
 ) {
     let world = match global_world.world.as_mut() {
         Some(world) => world,
@@ -109,6 +118,48 @@ fn load_chunk_from_queue(
                 return;
             }
         };
+
+        let samples = chunk.voxels().map(BoolVoxel::from);
+        let mut buffer = GreedyQuadsBuffer::new(samples.len());
+        greedy_quads(
+            &samples,
+            &ChunkShape {},
+            [0; 3],
+            [17; 3],
+            &RIGHT_HANDED_Y_UP_CONFIG.faces,
+            &mut buffer,
+        );
+        let num_indices = buffer.quads.num_quads() * 6;
+        let num_vertices = buffer.quads.num_quads() * 4;
+        let mut indices = Vec::with_capacity(num_indices);
+        let mut positions = Vec::with_capacity(num_vertices);
+        let mut normals = Vec::with_capacity(num_vertices);
+        for (group, face) in buffer.quads.groups.into_iter().zip(RIGHT_HANDED_Y_UP_CONFIG.faces.into_iter()) {
+            for quad in group.into_iter() {
+                indices.extend_from_slice(&face.quad_mesh_indices(positions.len() as u32));
+                positions.extend_from_slice(&face.quad_mesh_positions(&quad, 1.0));
+                normals.extend_from_slice(&face.quad_mesh_normals());
+            }
+        }
+
+        let mut render_mesh = Mesh::new(PrimitiveTopology::TriangleList);
+
+        render_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+        render_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+        render_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0; 2]; num_vertices]);
+        render_mesh.set_indices(Some(Indices::U32(indices.clone())));
+
+        let mesh = meshes.add(render_mesh);
+
+        let mut material = StandardMaterial::from(Color::rgb(0.0, 0.0, 0.0));
+        material.perceptual_roughness = 0.9;
+
+        commands.spawn(PbrBundle {
+            mesh,
+            material: materials.add(material),
+            transform: Transform::from_xyz((chunk_loc.x * 16) as f32, (chunk_loc.y * 16) as f32, (chunk_loc.z * 16) as f32),
+                ..Default::default()
+        });
 
         i += 1;
         if i == CHUNKS_PER_FRAME_CAP {

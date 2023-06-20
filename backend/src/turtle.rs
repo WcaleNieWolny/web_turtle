@@ -202,7 +202,12 @@ impl Turtle {
                 let db_block = db_block?;
 
                 if block == "\"No block to inspect\"" {
-                    if db_block.is_none() {
+                    //this is ugly, but it works
+                    if db_block.is_none() || match db_block {
+                            None => false,
+                            Some(x) => x.id == 0,
+                        }
+                    {
                         return Ok(None);
                     }
 

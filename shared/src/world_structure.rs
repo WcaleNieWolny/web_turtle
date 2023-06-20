@@ -62,7 +62,6 @@ impl ChunkLocation {
         //These are local chunk XYZ
         let (x, y, z): (u32, u32, u32) = ((x - chunk_top_x).abs().try_into()?, (y - (TryInto::<i32>::try_into(self.y)? << 4)).try_into()?, (z - chunk_top_z).abs().try_into()?);
 
-        println!("XYZ {x} {y} {z}");
         Ok((x, y, z))
     }
 }
@@ -122,6 +121,10 @@ impl TurtleChunk {
         let data = self.data.get_mut(ChunkShape::linearize([(x + 1).try_into()?, (y + 1).try_into()?, (z + 1).try_into()?]) as usize).ok_or::<String>("Something went really wrong, linearize is out of bounds".into())?;
 
         func(data)
+    }
+
+    pub fn voxels(&self) -> &[TurtleVoxel; ChunkShape::SIZE as usize] {
+        &self.data
     }
 }
 
