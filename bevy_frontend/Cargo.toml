@@ -8,23 +8,24 @@ edition = "2021"
 [dependencies]
 bevy = { version = "0.10.1" }
 bevy_panorbit_camera = "0.4.1"
-console_error_panic_hook = "0.1"
-console_log = "1.0.0"
 log = "0.4"
-wasm-bindgen = { version = "0.2", features = ["serde-serialize"] }
-wasm-bindgen-futures = "0.4"
 shared = { path = "../shared/" }
 serde = { version = "1", features = ["derive"] }
 serde-wasm-bindgen = "0.4"
 futures = { version = "0.3" }
 bevy_mod_raycast = "0.8.0"
 bevy_egui = "0.20.3"
-gloo-net = { version =  "0.2.6", features = ["http", "json"] }
 block-mesh = "0.2.0"
 bytes = "1"
 uuid = { version = "1", features = ["v4"] }
 
-#    this.chunk.x = this.block.x >> 4;     this.chunk.y = this.block.y >> 4;     this.chunk.z = this.block.z >> 4; 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+gloo-net = { version =  "0.2.6", features = ["http", "json"] }
+wasm-bindgen = { version = "0.2", features = ["serde-serialize"] }
+wasm-bindgen-futures = "0.4"
+console_error_panic_hook = "0.1"
+console_log = "1.0.0"
+
 
 [dependencies.web-sys]
 version = "0.3.6"

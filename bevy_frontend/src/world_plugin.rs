@@ -3,14 +3,11 @@ use bevy::render::render_resource::{PrimitiveTopology, VertexFormat};
 use bevy::{prelude::*, pbr::wireframe::Wireframe};
 use bytes::Bytes;
 use futures::channel::mpsc::{channel, Receiver, Sender, unbounded, UnboundedReceiver, UnboundedSender};
-use gloo_net::http::Request;
 use shared::world_structure::{TurtleWorld, TurtleVoxel, ChunkLocation};
-use wasm_bindgen::{JsCast, JsValue};
-use wasm_bindgen_futures::{spawn_local, JsFuture};
 use block_mesh::ndshape::{ConstShape, ConstShape3u32};
 use block_mesh::{greedy_quads, GreedyQuadsBuffer, MergeVoxel, Voxel, VoxelVisibility, RIGHT_HANDED_Y_UP_CONFIG};
 
-use crate::{SelectTurtleEvent, WorldChangeEvent, BlockRaycastSet};
+use crate::{SelectTurtleEvent, WorldChangeEvent, BlockRaycastSet, spawn_async};
 
 static CHUNKS_PER_FRAME_CAP: usize = 4;
 
@@ -226,39 +223,48 @@ fn turtle_change_listener(
                 //-1 becouse idk yet
                 //let (chunk_x, chunk_y, chunk_z) = (new_turtle.x >> 4, (new_turtle.y >> 4) - 1, new_turtle.z >> 4);
 
-                spawn_local(async move {
+                spawn_async(async move {
                     let url = format!("/turtle/{uuid}/world/");
 
-                    let resp = Request::get(&url)
-                        .send()
-                        .await;
+                    #[cfg(target_arch = "wasm32")] 
+                    {
+                        use gloo_net::http::Request;
+                        let resp = Request::get(&url)
+                            .send()
+                            .await;
 
-                    match resp {
-                        Ok(response) => {
-                            let bytes_vec: Bytes = match response.binary().await {
-                                Ok(val) => val.into(),
-                                Err(err) => {
-                                    log::error!("Something went wrong when converting response into bytes. Error: {err}");
-                                    tx.try_send(None).expect("Cannot send world result");
-                                    return;
-                                }
-                            };
+                        match resp {
+                            Ok(response) => {
+                                let bytes_vec: Bytes = match response.binary().await {
+                                    Ok(val) => val.into(),
+                                    Err(err) => {
+                                        log::error!("Something went wrong when converting response into bytes. Error: {err}");
+                                        tx.try_send(None).expect("Cannot send world result");
+                                        return;
+                                    }
+                                };
 
-                            let world = match TurtleWorld::from_bytes(bytes_vec) {
-                                Ok(val) => val,
-                                Err(err) => {
-                                    log::error!("Cannot convert backend response into world. Error: {err}");
-                                    tx.try_send(None).expect("Cannot send world result");
-                                    return;
-                                }
-                            };
+                                let world = match TurtleWorld::from_bytes(bytes_vec) {
+                                    Ok(val) => val,
+                                    Err(err) => {
+                                        log::error!("Cannot convert backend response into world. Error: {err}");
+                                        tx.try_send(None).expect("Cannot send world result");
+                                        return;
+                                    }
+                                };
 
-                            tx.try_send(Some(world)).expect("Cannot pass world into bevy system");
-                        },
-                        Err(err) => {
-                            log::error!("Something went wrong when fetching world. Error: {err}");
-                            tx.try_send(None).expect("Cannot send world result");
-                        },
+                                tx.try_send(Some(world)).expect("Cannot pass world into bevy system");
+                            },
+                            Err(err) => {
+                                log::error!("Something went wrong when fetching world. Error: {err}");
+                                tx.try_send(None).expect("Cannot send world result");
+                            },
+                        }
+                    }
+
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        todo!()
                     }
                 })
             }

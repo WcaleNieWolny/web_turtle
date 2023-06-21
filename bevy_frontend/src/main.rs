@@ -1,26 +1,35 @@
 mod move_plugin;
+
+#[cfg(target_arch = "wasm32")]
 mod resize_plugin;
-mod ui_plugin;
+#[cfg(target_arch = "wasm32")]
+mod html_ui_plugin;
 mod world_plugin;
 mod block_destroy_plugin;
 mod inventory_plugin;
 
 extern crate console_error_panic_hook;
 
-use std::f32::consts::TAU;
+use std::sync::RwLock;
+use std::{f32::consts::TAU, sync::Arc};
 use std::panic;
 
-use bevy::{prelude::*, render::{RenderPlugin, settings::{WgpuSettings, WgpuFeatures}}};
+use bevy::prelude::*;
 use bevy_mod_raycast::RaycastSource;
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
-use block_destroy_plugin::BlockDestroyPlugin;
+//use block_destroy_plugin::BlockDestroyPlugin;
+use futures::Future;
 use move_plugin::MovePlugin;
+#[cfg(target_arch = "wasm32")]
 use resize_plugin::ResizePlugin;
 use shared::{JsonTurtle, WorldChange};
-use ui_plugin::UiPlugin;
 use wasm_bindgen_futures::spawn_local;
 use world_plugin::WorldPlugin;
-use inventory_plugin::InventoryPlugin;
+
+#[cfg(target_arch = "wasm32")]
+use html_ui_plugin::UiPlugin;
+
+//use inventory_plugin::InventoryPlugin;
 
 #[derive(Reflect, Clone, Component)]
 pub struct BlockRaycastSet;
@@ -36,16 +45,55 @@ pub struct SelectTurtleEvent(Option<JsonTurtle>);
 
 pub struct WorldChangeEvent(WorldChange);
 
+#[cfg(target_arch = "wasm32")]
+pub fn spawn_async<F>(future: F)
+where
+    F: Future<Output = ()> + 'static
+{
+    spawn_local(future)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn spawn_async<F>(future: F)
+where
+    F: Future<Output = ()> + 'static
+{
+    todo!() 
+}
+
 fn main() {
     // When building for WASM, print panics to the browser console
-    use log::Level;
-    panic::set_hook(Box::new(console_error_panic_hook::hook));
-    console_log::init_with_level(Level::Warn).unwrap();
-    spawn_local(async { async_main().await });
+
+    #[cfg(target_arch = "wasm32")]{
+        use log::Level;
+        panic::set_hook(Box::new(console_error_panic_hook::hook));
+        console_log::init_with_level(Level::Warn).unwrap();
+        log::warn!("WASM FEAT");
+    }
+    spawn_async(async { async_main().await });
+}
+
+struct PlatformIndependentPlugins;
+
+#[derive(Resource)]
+pub struct MainTurtle(Arc<RwLock<Option<JsonTurtle>>>);
+
+impl Plugin for PlatformIndependentPlugins {
+    fn build(&self, app: &mut App) {
+        #[cfg(target_arch = "wasm32")] 
+        {
+            app.add_plugin(UiPlugin)
+                .add_plugin(ResizePlugin);
+        }
+        #[cfg(not(target_arch = "wasm32"))] 
+        {
+            todo!()
+        }
+    }
 }
 
 async fn async_main() {
-    App::new()
+   App::new()
         .add_plugins(DefaultPlugins.build().set(WindowPlugin {
             primary_window: Some(Window {
                 fit_canvas_to_parent: true,
@@ -57,11 +105,10 @@ async fn async_main() {
         .insert_resource(Msaa::Sample4)
         .add_event::<SelectTurtleEvent>()
         .add_event::<WorldChangeEvent>()
-        .add_plugin(ResizePlugin)
-        .add_plugin(UiPlugin)
         .add_plugin(PanOrbitCameraPlugin)
         .add_plugin(MovePlugin)
         .add_plugin(WorldPlugin)
+        .add_plugin(PlatformIndependentPlugins)
         //.add_plugin(BlockDestroyPlugin)
         //.add_plugin(InventoryPlugin)
         .add_plugin(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())

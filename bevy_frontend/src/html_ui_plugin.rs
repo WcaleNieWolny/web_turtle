@@ -10,14 +10,11 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::{HtmlElement, MouseEvent, PointerEvent, Request, RequestInit, Response};
 
-use crate::SelectTurtleEvent;
+use crate::{SelectTurtleEvent, MainTurtle};
 
 static mut MAIN_TURTLE: Option<Arc<RwLock<Option<JsonTurtle>>>> = None;
 static mut TURTLE_VEC: Option<Arc<RwLock<HashMap<Uuid, JsonTurtle>>>> = None;
 static mut ON_CLICK_CLOSURE: Option<JsValue> = None;
-
-#[derive(Resource)]
-pub struct MainTurtle(Arc<RwLock<Option<JsonTurtle>>>);
 
 pub struct UiPlugin;
 
