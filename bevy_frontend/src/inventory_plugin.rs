@@ -35,7 +35,6 @@ impl Plugin for InventoryPlugin {
                 open: false,
                 open_changed: false
             })
-            .add_plugin(EguiPlugin)
             .add_startup_system(setup_text_styles)
             .add_system(open_ui_based_on_keyboard)
             .add_system(ui_example_system);

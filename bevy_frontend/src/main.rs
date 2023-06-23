@@ -19,6 +19,7 @@ use std::sync::RwLock;
 use std::{f32::consts::TAU, sync::Arc};
 
 use bevy::prelude::*;
+use bevy_egui::EguiPlugin;
 use bevy_mod_raycast::RaycastSource;
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 //use block_destroy_plugin::BlockDestroyPlugin;
@@ -130,6 +131,7 @@ async fn async_main() {
         .add_plugin(PlatformIndependentPlugins)
         //.add_plugin(BlockDestroyPlugin)
         //.add_plugin(InventoryPlugin)
+        .add_plugin(EguiPlugin)
         .add_plugin(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
         .add_plugin(bevy::diagnostic::LogDiagnosticsPlugin::default())
         .add_startup_system(setup)
