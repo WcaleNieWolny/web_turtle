@@ -3,14 +3,14 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use uuid::Uuid;
 use bevy::{prelude::*, utils::HashMap};
 use shared::JsonTurtle;
+use uuid::Uuid;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::{HtmlElement, MouseEvent, PointerEvent, Request, RequestInit, Response};
 
-use crate::{SelectTurtleEvent, MainTurtle};
+use crate::{MainTurtle, SelectTurtleEvent};
 
 static mut MAIN_TURTLE: Option<Arc<RwLock<Option<JsonTurtle>>>> = None;
 static mut TURTLE_VEC: Option<Arc<RwLock<HashMap<Uuid, JsonTurtle>>>> = None;
@@ -49,8 +49,8 @@ fn setup_ui_system(mut commands: Commands) {
         let id = target
             .get_attribute("data-id")
             .expect("No ID atribute, THE USER IS A HACKER, NOT COOL BRO!!!!!!!!!");
-        let id = Uuid::try_parse(&id)
-            .expect("Invalid UUID, THE USER HAS TAMPERED WITH THE UUID!!!!!");
+        let id =
+            Uuid::try_parse(&id).expect("Invalid UUID, THE USER HAS TAMPERED WITH THE UUID!!!!!");
 
         let global_turtle_vec = unsafe { TURTLE_VEC.as_mut().unwrap_unchecked() };
 

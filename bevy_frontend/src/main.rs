@@ -1,35 +1,46 @@
 mod move_plugin;
 
-#[cfg(target_arch = "wasm32")]
-mod resize_plugin;
+mod block_destroy_plugin;
+#[cfg(not(target_arch = "wasm32"))]
+mod egui_ui_plugin;
 #[cfg(target_arch = "wasm32")]
 mod html_ui_plugin;
+#[cfg(target_arch = "wasm32")]
+mod resize_plugin;
 mod world_plugin;
-mod block_destroy_plugin;
-mod inventory_plugin;
 
+//mod inventory_plugin;
+
+#[cfg(target_arch = "wasm32")]
 extern crate console_error_panic_hook;
 
+use std::panic;
 use std::sync::RwLock;
 use std::{f32::consts::TAU, sync::Arc};
-use std::panic;
 
 use bevy::prelude::*;
 use bevy_mod_raycast::RaycastSource;
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 //use block_destroy_plugin::BlockDestroyPlugin;
 use futures::Future;
+#[cfg(target_arch = "wasm32")]
+use html_ui_plugin::UiPlugin;
 use move_plugin::MovePlugin;
 #[cfg(target_arch = "wasm32")]
 use resize_plugin::ResizePlugin;
 use shared::{JsonTurtle, WorldChange};
+#[cfg(not(target_arch = "wasm32"))]
+use tokio::runtime::{Builder, Runtime};
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::spawn_local;
 use world_plugin::WorldPlugin;
 
-#[cfg(target_arch = "wasm32")]
-use html_ui_plugin::UiPlugin;
-
 //use inventory_plugin::InventoryPlugin;
+
+#[cfg(target_arch = "wasm32")]
+static TURTLE_ASSET_LOCATION: &str = "/assets/turtle_model.glb#Scene0";
+#[cfg(not(target_arch = "wasm32"))]
+static TURTLE_ASSET_LOCATION: &str = "turtle_model.glb#Scene0";
 
 #[derive(Reflect, Clone, Component)]
 pub struct BlockRaycastSet;
@@ -48,23 +59,31 @@ pub struct WorldChangeEvent(WorldChange);
 #[cfg(target_arch = "wasm32")]
 pub fn spawn_async<F>(future: F)
 where
-    F: Future<Output = ()> + 'static
+    F: Future<Output = ()> + 'static,
 {
     spawn_local(future)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+static TOKIO_RUNTIME: once_cell::sync::Lazy<Runtime> = once_cell::sync::Lazy::new(|| {
+    Builder::new_current_thread()
+        .build()
+        .expect("Cannot build tokio runtime")
+});
+
+#[cfg(not(target_arch = "wasm32"))]
 pub fn spawn_async<F>(future: F)
 where
-    F: Future<Output = ()> + 'static
+    F: Future<Output = ()> + 'static,
 {
-    todo!() 
+    TOKIO_RUNTIME.block_on(future);
 }
 
 fn main() {
     // When building for WASM, print panics to the browser console
 
-    #[cfg(target_arch = "wasm32")]{
+    #[cfg(target_arch = "wasm32")]
+    {
         use log::Level;
         panic::set_hook(Box::new(console_error_panic_hook::hook));
         console_log::init_with_level(Level::Warn).unwrap();
@@ -75,25 +94,25 @@ fn main() {
 
 struct PlatformIndependentPlugins;
 
-#[derive(Resource)]
+#[derive(Resource, Deref)]
 pub struct MainTurtle(Arc<RwLock<Option<JsonTurtle>>>);
 
 impl Plugin for PlatformIndependentPlugins {
     fn build(&self, app: &mut App) {
-        #[cfg(target_arch = "wasm32")] 
+        #[cfg(target_arch = "wasm32")]
         {
-            app.add_plugin(UiPlugin)
-                .add_plugin(ResizePlugin);
+            app.add_plugin(UiPlugin).add_plugin(ResizePlugin);
         }
-        #[cfg(not(target_arch = "wasm32"))] 
+        #[cfg(not(target_arch = "wasm32"))]
         {
-            todo!()
+            use egui_ui_plugin::UiPlugin;
+            app.add_plugin(UiPlugin);
         }
     }
 }
 
 async fn async_main() {
-   App::new()
+    App::new()
         .add_plugins(DefaultPlugins.build().set(WindowPlugin {
             primary_window: Some(Window {
                 fit_canvas_to_parent: true,
@@ -120,7 +139,7 @@ async fn async_main() {
 //https://bevyengine.org/examples/3d/3d-scene/
 /// set up a simple 3D scene
 fn setup(mut commands: Commands, assets: Res<AssetServer>) {
-    let gltf: Handle<Scene> = assets.load("/assets/turtle_model.glb#Scene0");
+    let gltf: Handle<Scene> = assets.load(TURTLE_ASSET_LOCATION);
     commands.spawn((
         SceneBundle {
             scene: gltf,
@@ -139,18 +158,19 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>) {
     ));
 
     // camera
-    commands.spawn((
-        Camera3dBundle::default(),
-        PanOrbitCamera {
-            focus: Vec3::new(0.5, 0.5, 0.5),
-            radius: 8.0,
-            pan_sensitivity: 1.0,
-            beta: TAU / 18.0,
-            ..default()
-        },
-        MainCamera,
-    ))
-    .insert(RaycastSource::<BlockRaycastSet>::new());
+    commands
+        .spawn((
+            Camera3dBundle::default(),
+            PanOrbitCamera {
+                focus: Vec3::new(0.5, 0.5, 0.5),
+                radius: 8.0,
+                pan_sensitivity: 1.0,
+                beta: TAU / 18.0,
+                ..default()
+            },
+            MainCamera,
+        ))
+        .insert(RaycastSource::<BlockRaycastSet>::new());
 
     // light
     commands.insert_resource(AmbientLight {

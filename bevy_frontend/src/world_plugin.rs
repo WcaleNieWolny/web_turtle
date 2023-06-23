@@ -1,13 +1,17 @@
-use bevy::render::mesh::{MeshVertexAttribute, Indices};
+use bevy::render::mesh::{Indices, MeshVertexAttribute};
 use bevy::render::render_resource::{PrimitiveTopology, VertexFormat};
-use bevy::{prelude::*, pbr::wireframe::Wireframe};
-use bytes::Bytes;
-use futures::channel::mpsc::{channel, Receiver, Sender, unbounded, UnboundedReceiver, UnboundedSender};
-use shared::world_structure::{TurtleWorld, TurtleVoxel, ChunkLocation};
+use bevy::{pbr::wireframe::Wireframe, prelude::*};
 use block_mesh::ndshape::{ConstShape, ConstShape3u32};
-use block_mesh::{greedy_quads, GreedyQuadsBuffer, MergeVoxel, Voxel, VoxelVisibility, RIGHT_HANDED_Y_UP_CONFIG};
+use block_mesh::{
+    greedy_quads, GreedyQuadsBuffer, MergeVoxel, Voxel, VoxelVisibility, RIGHT_HANDED_Y_UP_CONFIG,
+};
+use bytes::Bytes;
+use futures::channel::mpsc::{
+    channel, unbounded, Receiver, Sender, UnboundedReceiver, UnboundedSender,
+};
+use shared::world_structure::{ChunkLocation, TurtleVoxel, TurtleWorld};
 
-use crate::{SelectTurtleEvent, WorldChangeEvent, BlockRaycastSet, spawn_async};
+use crate::{spawn_async, BlockRaycastSet, SelectTurtleEvent, WorldChangeEvent};
 
 static CHUNKS_PER_FRAME_CAP: usize = 4;
 
@@ -27,7 +31,7 @@ struct GlobalWorldGate {
 
 #[derive(Resource)]
 struct GlobalWorld {
-    world: Option<TurtleWorld>
+    world: Option<TurtleWorld>,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -54,7 +58,7 @@ impl MergeVoxel for BoolVoxel {
 
 impl From<TurtleVoxel> for BoolVoxel {
     fn from(value: TurtleVoxel) -> Self {
-        Self(value) 
+        Self(value)
     }
 }
 
@@ -72,9 +76,7 @@ impl Plugin for WorldPlugin {
             chunk_load_rx: chunk_rx,
             chunk_load_tx: chunk_tx,
         })
-        .insert_resource(GlobalWorld {
-            world: None
-        })
+        .insert_resource(GlobalWorld { world: None })
         .add_system(turtle_change_listener)
         .add_system(recive_all_new_world)
         .add_system(block_change_detect)
@@ -87,11 +89,11 @@ fn load_chunk_from_queue(
     mut global_world: ResMut<GlobalWorld>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut commands: Commands
+    mut commands: Commands,
 ) {
     let world = match global_world.world.as_mut() {
         Some(world) => world,
-        None => return
+        None => return,
     };
 
     let (_, world_data) = world.get_fields_mut();
@@ -131,7 +133,12 @@ fn load_chunk_from_queue(
         let mut indices = Vec::with_capacity(num_indices);
         let mut positions = Vec::with_capacity(num_vertices);
         let mut normals = Vec::with_capacity(num_vertices);
-        for (group, face) in buffer.quads.groups.into_iter().zip(RIGHT_HANDED_Y_UP_CONFIG.faces.into_iter()) {
+        for (group, face) in buffer
+            .quads
+            .groups
+            .into_iter()
+            .zip(RIGHT_HANDED_Y_UP_CONFIG.faces.into_iter())
+        {
             for quad in group.into_iter() {
                 indices.extend_from_slice(&face.quad_mesh_indices(positions.len() as u32));
                 positions.extend_from_slice(&face.quad_mesh_positions(&quad, 1.0));
@@ -154,8 +161,12 @@ fn load_chunk_from_queue(
         commands.spawn(PbrBundle {
             mesh,
             material: materials.add(material),
-            transform: Transform::from_xyz((chunk_loc.x * 16) as f32, (chunk_loc.y * 16) as f32, (chunk_loc.z * 16) as f32),
-                ..Default::default()
+            transform: Transform::from_xyz(
+                (chunk_loc.x * 16) as f32,
+                (chunk_loc.y * 16) as f32,
+                (chunk_loc.z * 16) as f32,
+            ),
+            ..Default::default()
         });
 
         i += 1;
@@ -177,11 +188,10 @@ fn recive_all_new_world(
                         Some(mut world) => {
                             log::warn!("New world: {world:?}");
                             let (_, world_data) = world.get_fields_mut();
-                            let res = world_data
-                                .iter()
-                                .map(|(loc, _)| loc)
-                                .try_for_each(|loc| global_world_gate.chunk_load_tx.unbounded_send(loc.clone()));
-                                
+                            let res = world_data.iter().map(|(loc, _)| loc).try_for_each(|loc| {
+                                global_world_gate.chunk_load_tx.unbounded_send(loc.clone())
+                            });
+
                             if let Err(err) = res {
                                 log::error!("Cannot send turtle chunks loc into further processing. Err: {err}");
                                 return;
@@ -226,12 +236,10 @@ fn turtle_change_listener(
                 spawn_async(async move {
                     let url = format!("/turtle/{uuid}/world/");
 
-                    #[cfg(target_arch = "wasm32")] 
+                    #[cfg(target_arch = "wasm32")]
                     {
                         use gloo_net::http::Request;
-                        let resp = Request::get(&url)
-                            .send()
-                            .await;
+                        let resp = Request::get(&url).send().await;
 
                         match resp {
                             Ok(response) => {
@@ -253,12 +261,15 @@ fn turtle_change_listener(
                                     }
                                 };
 
-                                tx.try_send(Some(world)).expect("Cannot pass world into bevy system");
-                            },
+                                tx.try_send(Some(world))
+                                    .expect("Cannot pass world into bevy system");
+                            }
                             Err(err) => {
-                                log::error!("Something went wrong when fetching world. Error: {err}");
+                                log::error!(
+                                    "Something went wrong when fetching world. Error: {err}"
+                                );
                                 tx.try_send(None).expect("Cannot send world result");
-                            },
+                            }
                         }
                     }
 
@@ -297,7 +308,7 @@ fn block_change_detect(
                         ..default()
                     },
                     WorldBlock,
-                    bevy_mod_raycast::RaycastMesh::<BlockRaycastSet>::default()
+                    bevy_mod_raycast::RaycastMesh::<BlockRaycastSet>::default(),
                 ));
             }
             shared::WorldChangeAction::Update(update) => {

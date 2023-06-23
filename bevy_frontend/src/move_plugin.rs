@@ -6,7 +6,7 @@ use futures::channel::mpsc::{self, Receiver, Sender};
 use shared::{JsonTurtleDirection, TurtleMoveResponse};
 
 use crate::{
-    MainCamera, MainTurtleObject, SelectTurtleEvent, WorldChangeEvent, spawn_async, MainTurtle,
+    spawn_async, MainCamera, MainTurtle, MainTurtleObject, SelectTurtleEvent, WorldChangeEvent,
 };
 
 pub struct MovePlugin;
@@ -85,16 +85,12 @@ fn keybord_input(
     spawn_async(async move {
         let string_direction = direction.to_string();
         let path = format!("/turtle/{uuid}/move/");
-        
 
-        #[cfg(target_arch = "wasm32")] 
+        #[cfg(target_arch = "wasm32")]
         {
             use gloo_net::http::Request;
 
-            let resp = Request::put(&path)
-                .body(string_direction)
-                .send()
-                .await;
+            let resp = Request::put(&path).body(string_direction).send().await;
 
             match resp {
                 Ok(resp) => {
@@ -105,18 +101,18 @@ fn keybord_input(
                             tx.try_send(None)
                                 .expect("Cannot notify bevy move system (Err json)");
                             return;
-                        },
+                        }
                     };
 
                     tx.try_send(Some(result))
                         .expect("Cannot notify bevy move system (Ok)");
-                },
+                }
                 Err(err) => {
                     log::error!("Put move request went wrong {err}");
                     tx.try_send(None)
                         .expect("Cannot notify bevy move system (Err)");
                     return;
-                },
+                }
             }
 
             main_turtle
@@ -127,16 +123,17 @@ fn keybord_input(
                     match direction {
                         JsonTurtleDirection::Right | JsonTurtleDirection::Left => {
                             main_turtle.rotation.rotate_self(&direction);
-                        },
+                        }
                         JsonTurtleDirection::Backward | JsonTurtleDirection::Forward => {
-                            let (x_change, y_change, z_change) = direction.to_turtle_move_diff(&main_turtle.rotation);
+                            let (x_change, y_change, z_change) =
+                                direction.to_turtle_move_diff(&main_turtle.rotation);
                             main_turtle.x += x_change;
                             main_turtle.y += y_change;
                             main_turtle.z += z_change;
-                        },
+                        }
                     };
                     None::<()>
-            });
+                });
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
