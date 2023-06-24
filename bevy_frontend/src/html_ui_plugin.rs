@@ -23,14 +23,6 @@ struct TurtleEventChangeState {
     previous_turtle: Option<JsonTurtle>,
 }
 
-impl Deref for MainTurtle {
-    type Target = Arc<RwLock<Option<JsonTurtle>>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 fn setup_ui_system(mut commands: Commands) {
     let main_turtle: Arc<RwLock<Option<JsonTurtle>>> = Arc::new(RwLock::new(None));
     let turtle_vec: Arc<RwLock<HashMap<Uuid, JsonTurtle>>> = Arc::new(RwLock::new(HashMap::new()));

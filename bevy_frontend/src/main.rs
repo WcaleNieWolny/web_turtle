@@ -67,7 +67,8 @@ where
 
 #[cfg(not(target_arch = "wasm32"))]
 static TOKIO_RUNTIME: once_cell::sync::Lazy<Runtime> = once_cell::sync::Lazy::new(|| {
-    Builder::new_current_thread()
+    Builder::new_multi_thread()
+        .worker_threads(1)
         .build()
         .expect("Cannot build tokio runtime")
 });
@@ -75,9 +76,9 @@ static TOKIO_RUNTIME: once_cell::sync::Lazy<Runtime> = once_cell::sync::Lazy::ne
 #[cfg(not(target_arch = "wasm32"))]
 pub fn spawn_async<F>(future: F)
 where
-    F: Future<Output = ()> + 'static,
+    F: Future<Output = ()> + 'static + Send,
 {
-    TOKIO_RUNTIME.block_on(future);
+    TOKIO_RUNTIME.spawn(future);
 }
 
 fn main() {
@@ -90,7 +91,14 @@ fn main() {
         console_log::init_with_level(Level::Warn).unwrap();
         log::warn!("WASM FEAT");
     }
-    spawn_async(async { async_main().await });
+    #[cfg(target_arch = "wasm32")]
+    {
+        spawn_async(async { async_main().await });
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        TOKIO_RUNTIME.block_on(async { async_main().await });
+    }
 }
 
 struct PlatformIndependentPlugins;
