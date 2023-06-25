@@ -1,18 +1,34 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
+use std::error::Error;
 
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui::{self, Align2, Color32, Frame, Layout, Align, Ui, Margin, style::WidgetVisuals, Stroke, RichText, FontId, FontFamily, FontDefinitions, FontData, Rounding}};
 use egui_extras::RetainedImage;
+use futures::channel::mpsc::{Sender, Receiver, channel};
+use shared::JsonTurtle;
+use uuid::Uuid;
 
-use crate::MainTurtle;
+use crate::{MainTurtle, spawn_async};
 
 pub struct UiPlugin;
 
 #[derive(Resource, Deref)]
 struct RefreshButtonImg(RetainedImage);
 
+#[derive(Resource)]
+struct UiGate {
+    all_turtles: Vec<JsonTurtle>,
+    selected_turtle_uuid: Option<Uuid>,
+    fetching: AtomicBool,
+    fetching_tx: Sender<Result<Vec<JsonTurtle>, Box<dyn Error + Send + Sync>>>,
+    fetching_rx: Receiver<Result<Vec<JsonTurtle>, Box<dyn Error + Send + Sync>>>
+}
+
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
+        let (tx, rx) = channel(8);
+
         app
             .insert_resource(MainTurtle(Arc::new(RwLock::new(None))))
             .insert_resource(RefreshButtonImg(
@@ -22,6 +38,14 @@ impl Plugin for UiPlugin {
                     egui_extras::image::FitTo::Original
                 ).unwrap()
             ))
+            .insert_resource(UiGate {
+                all_turtles: vec![],
+                selected_turtle_uuid: None,
+                fetching: AtomicBool::new(false),
+                fetching_tx: tx,
+                fetching_rx: rx
+            })
+            .add_system(recive_turtle_list)
             .add_startup_system(setup_font)
             .add_system(draw_egui_ui);
     }
@@ -41,7 +65,8 @@ fn setup_font(mut contexts: EguiContexts) {
 
 fn draw_egui_ui(
     mut contexts: EguiContexts,
-    image: Res<RefreshButtonImg>
+    image: Res<RefreshButtonImg>,
+    gate: Res<UiGate> 
 ) {
     egui::panel::TopBottomPanel::new(egui::panel::TopBottomSide::Top, "aaa")
         //.pivot(Align2::LEFT_TOP)
@@ -74,11 +99,22 @@ fn draw_egui_ui(
                         .rounding(Rounding::same(9999.))
                         .stroke(Stroke::new(8., Color32::from_rgb(6, 182, 212)));
 
-
-                    margin.show(ui, |ui| {
+                    let image = margin.show(ui, |ui| {
                         //image.show_size(ui, [32., 32.].into()); 
                         image.show_max_size(ui, [32., 32.].into());
-                    })
+                    });
+
+                    let response = image.response.interact(egui::Sense::click());
+
+                    if response.clicked() && !gate.fetching.load(Ordering::Relaxed) {
+                        gate.fetching.store(true, Ordering::Relaxed);
+
+                        let mut tx = gate.fetching_tx.clone();
+                        spawn_async(async move {
+                            let res = fetch_turtles().await;
+                            tx.try_send(res).expect("Cannot send fetch result to bevy"); 
+                        })
+                    }
                 });
 
             });
@@ -104,4 +140,34 @@ fn turtle_button(ui: &mut Ui) {
 
         ui.add_sized([46., 46.0], egui::Button::new(text).frame(false));
     });
+}
+
+fn recive_turtle_list(mut gate: ResMut<UiGate>) {
+    while let Ok(response) = gate.fetching_rx.try_next() {
+        let response = response.expect("Fetch UI channel closed");
+
+        gate.fetching.store(false, Ordering::Relaxed);
+        match response {
+            Ok(new_turtles) => {
+                log::warn!("New turtle list: {new_turtles:?}")
+            },
+            Err(err) => {
+                log::error!("Cannot fetch turtle list: {err}")
+            },
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+async fn fetch_turtles() -> Result<Vec<JsonTurtle>, Box<dyn Error + Send + Sync>> {
+    use crate::HTTP_BACKEND_URL;
+
+    let url = format!("{}/turtle/list/", HTTP_BACKEND_URL);
+
+    let resp = reqwest::get(&url)
+        .await?
+        .json::<Vec<JsonTurtle>>()
+        .await?;
+
+    Ok(resp)
 }

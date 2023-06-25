@@ -38,6 +38,9 @@ use world_plugin::WorldPlugin;
 
 //use inventory_plugin::InventoryPlugin;
 
+
+#[cfg(not(target_arch = "wasm32"))]
+static HTTP_BACKEND_URL: &str = "http://0.0.0.0:8000";
 #[cfg(target_arch = "wasm32")]
 static TURTLE_ASSET_LOCATION: &str = "/assets/turtle_model.glb#Scene0";
 #[cfg(not(target_arch = "wasm32"))]
@@ -69,6 +72,8 @@ where
 static TOKIO_RUNTIME: once_cell::sync::Lazy<Runtime> = once_cell::sync::Lazy::new(|| {
     Builder::new_multi_thread()
         .worker_threads(1)
+        .enable_io()
+        .enable_time()
         .build()
         .expect("Cannot build tokio runtime")
 });
