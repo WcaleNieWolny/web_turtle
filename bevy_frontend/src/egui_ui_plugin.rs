@@ -9,7 +9,7 @@ use futures::channel::mpsc::{Sender, Receiver, channel};
 use shared::JsonTurtle;
 use uuid::Uuid;
 
-use crate::{MainTurtle, spawn_async};
+use crate::{MainTurtle, spawn_async, SelectTurtleEvent};
 
 pub struct UiPlugin;
 
@@ -66,7 +66,8 @@ fn setup_font(mut contexts: EguiContexts) {
 fn draw_egui_ui(
     mut contexts: EguiContexts,
     image: Res<RefreshButtonImg>,
-    gate: Res<UiGate> 
+    gate: Res<UiGate>,
+    mut ev_change: EventWriter<SelectTurtleEvent>
 ) {
     egui::panel::TopBottomPanel::new(egui::panel::TopBottomSide::Top, "aaa")
         //.pivot(Align2::LEFT_TOP)
@@ -87,8 +88,16 @@ fn draw_egui_ui(
         //.auto_sized()
         .show(contexts.ctx_mut(), |ui| {
             ui.with_layout(Layout::left_to_right(Align::Min), |ui| {
-                turtle_button(ui);
-                turtle_button(ui);
+                gate
+                    .all_turtles
+                    .iter()
+                    .enumerate()
+                    .for_each(|(i, turtle)| {
+                        //User clicked this button
+                        if turtle_button(ui, i) {
+
+                        }
+                    });
 
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     let margin = egui::Frame::none()
@@ -121,7 +130,10 @@ fn draw_egui_ui(
         });
 }
 
-fn turtle_button(ui: &mut Ui) {
+fn turtle_button(
+    ui: &mut Ui,
+    i: usize,
+) -> bool {
     let margin = egui::Frame::none()
         .fill(egui::Color32::from_rgb(6, 182, 212))
         .outer_margin(Margin::same(4.))
@@ -133,13 +145,19 @@ fn turtle_button(ui: &mut Ui) {
         ui.visuals_mut().widgets.hovered = ui.visuals().widgets.inactive;
         ui.visuals_mut().widgets.active = ui.visuals().widgets.inactive;
         
-        let text = RichText::new("8")
+        let text = RichText::new(i.to_string())
             .color(Color32::BLACK)
             .size(20.)
             .font(FontId::new(20.0, FontFamily::Name("ui-sans-serif".into())));
 
-        ui.add_sized([46., 46.0], egui::Button::new(text).frame(false));
+        let button = egui::Button::new(text).frame(false);
+        let response = ui.add_sized([46., 46.0], button);
+
+        return response.clicked();
     });
+
+    //Hopefuly unreachable
+    return false;
 }
 
 fn recive_turtle_list(mut gate: ResMut<UiGate>) {
@@ -149,7 +167,9 @@ fn recive_turtle_list(mut gate: ResMut<UiGate>) {
         gate.fetching.store(false, Ordering::Relaxed);
         match response {
             Ok(new_turtles) => {
-                log::warn!("New turtle list: {new_turtles:?}")
+                //TODO: CHECK IF SELECTED UID EXIST IN NEW TURTLES!
+                log::warn!("New turtle list: {new_turtles:?}");
+                gate.all_turtles = new_turtles;
             },
             Err(err) => {
                 log::error!("Cannot fetch turtle list: {err}")
