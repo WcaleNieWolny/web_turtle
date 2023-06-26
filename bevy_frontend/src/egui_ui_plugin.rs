@@ -3,6 +3,7 @@ use std::sync::{Arc, RwLock};
 use std::error::Error;
 
 use bevy::prelude::*;
+use bevy_egui::egui::Id;
 use bevy_egui::{EguiContexts, egui::{self, Align2, Color32, Frame, Layout, Align, Ui, Margin, style::WidgetVisuals, Stroke, RichText, FontId, FontFamily, FontDefinitions, FontData, Rounding}};
 use egui_extras::RetainedImage;
 use futures::channel::mpsc::{Sender, Receiver, channel};
@@ -163,16 +164,27 @@ fn turtle_button(
     i: usize,
     is_main_turtle: bool
 ) -> bool {
+    //This took some anoying testing but it SHOULD work (hopefuly some update does not break this)
+    let (start_x, start_y) = (ui.cursor().left_top().x, ui.cursor().left_top().y);
+    let hovered = ui.interact(bevy_egui::egui::Rect::from_x_y_ranges(start_x..=start_x + 56., start_y..=start_y + 56.), Id::null(), egui::Sense::hover()).hovered();
+
+    let bg_color = if hovered && !is_main_turtle {
+        egui::Color32::from_rgb(34, 197, 94)
+    } else {
+        egui::Color32::from_rgb(6, 182, 212)
+    };
+
+
     let (border_color, rounding) = if is_main_turtle {
         (Color32::from_rgb(21, 128, 61), 4.)
     } else {
-        (egui::Color32::from_rgb(6, 182, 212), 0.)
+        (bg_color.clone(), 0.)
     };
 
     let mut return_val = false;
 
     let margin = egui::Frame::none()
-        .fill(egui::Color32::from_rgb(6, 182, 212))
+        .fill(bg_color)
         .outer_margin(Margin::same(4.))
         .inner_margin(Margin::same(1.))
         .rounding(Rounding::same(rounding))
