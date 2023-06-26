@@ -1,9 +1,10 @@
-use std::time::Duration;
+use std::{time::Duration, error::Error};
 
 use bevy::prelude::*;
 use bevy_panorbit_camera::PanOrbitCamera;
 use futures::channel::mpsc::{self, Receiver, Sender};
-use shared::{JsonTurtleDirection, TurtleMoveResponse};
+use uuid::Uuid;
+use shared::{JsonTurtleDirection, TurtleMoveResponse, JsonTurtle};
 
 use crate::{
     spawn_async, MainCamera, MainTurtle, MainTurtleObject, SelectTurtleEvent, WorldChangeEvent,
@@ -61,7 +62,7 @@ fn keybord_input(
         JsonTurtleDirection::Left
     } else if keys.pressed(KeyCode::D) {
         JsonTurtleDirection::Right
-    } else {
+   } else {
         return;
     };
 
@@ -80,35 +81,19 @@ fn keybord_input(
     gate.handle_request = true;
 
     let mut tx = gate.move_sender.clone();
+
+    //Clone so we can move to the future
     let main_turtle = main_turtle.clone();
-
     spawn_async(async move {
-        let string_direction = direction.to_string();
-        let path = format!("/turtle/{uuid}/move/");
-
-        #[cfg(target_arch = "wasm32")]
-        {
-            use gloo_net::http::Request;
-
-            let resp = Request::put(&path).body(string_direction).send().await;
+            let resp = send_move_request(&direction, &uuid).await;
 
             match resp {
-                Ok(resp) => {
-                    let result = match resp.json::<TurtleMoveResponse>().await {
-                        Ok(val) => val,
-                        Err(err) => {
-                            log::error!("Cannot parse move response as JSON! Err: {err}");
-                            tx.try_send(None)
-                                .expect("Cannot notify bevy move system (Err json)");
-                            return;
-                        }
-                    };
-
+                Ok(result) => {
                     tx.try_send(Some(result))
                         .expect("Cannot notify bevy move system (Ok)");
                 }
                 Err(err) => {
-                    log::error!("Put move request went wrong {err}");
+                    log::error!("Cannot send move request: {err}");
                     tx.try_send(None)
                         .expect("Cannot notify bevy move system (Err)");
                     return;
@@ -134,12 +119,37 @@ fn keybord_input(
                     };
                     None::<()>
                 });
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            todo!()
-        }
     })
+}
+
+
+#[cfg(target_arch = "wasm32")]
+async fn send_move_request(direction: &JsonTurtleDirection, uuid: &Uuid) -> Result<TurtleMoveResponse, Box<dyn Error>> {
+    use gloo_net::http::Request;
+
+    let response = Request::put(&format!("/turtle/{uuid}/move/"))
+        .body(direction.to_string())
+        .send()
+        .await?
+        .json::<TurtleMoveResponse>()
+        .await?;
+
+    Ok(response)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+async fn send_move_request(direction: &JsonTurtleDirection, uuid: &Uuid) -> Result<TurtleMoveResponse, Box<dyn Error + Send + Sync>> {
+    use crate::{HTTP_BACKEND_URL, REQWEST_CLIENT};
+
+    let path = format!("{}/turtle/{uuid}/move/", HTTP_BACKEND_URL);
+    let response = REQWEST_CLIENT
+        .put(path)
+        .body(direction.to_string())
+        .send()
+        .await?
+        .json::<TurtleMoveResponse>().await?;
+
+    Ok(response)
 }
 
 fn recive_notification(
@@ -239,6 +249,7 @@ fn on_turtle_change(
                 start_z + turtle.z as f32,
             );
             turtle_transform.rotation = Quat::from_euler(EulerRot::YXZ, rot_y, 0.0, 0.0);
+            turtle_transform.set_changed();
 
             let mut camera = camera_query.single_mut();
             camera.focus = Vec3::new(

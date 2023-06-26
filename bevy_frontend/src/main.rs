@@ -79,6 +79,11 @@ static TOKIO_RUNTIME: once_cell::sync::Lazy<Runtime> = once_cell::sync::Lazy::ne
 });
 
 #[cfg(not(target_arch = "wasm32"))]
+static REQWEST_CLIENT: once_cell::sync::Lazy<reqwest::Client> = once_cell::sync::Lazy::new(|| {
+    reqwest::Client::new()
+});
+
+#[cfg(not(target_arch = "wasm32"))]
 pub fn spawn_async<F>(future: F)
 where
     F: Future<Output = ()> + 'static + Send,

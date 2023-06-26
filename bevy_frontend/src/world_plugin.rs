@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use bevy::render::mesh::{Indices, MeshVertexAttribute};
 use bevy::render::render_resource::{PrimitiveTopology, VertexFormat};
 use bevy::{pbr::wireframe::Wireframe, prelude::*};
@@ -10,6 +12,7 @@ use futures::channel::mpsc::{
     channel, unbounded, Receiver, Sender, UnboundedReceiver, UnboundedSender,
 };
 use shared::world_structure::{ChunkLocation, TurtleVoxel, TurtleWorld};
+use uuid::Uuid;
 
 use crate::{spawn_async, BlockRaycastSet, SelectTurtleEvent, WorldChangeEvent};
 
@@ -186,7 +189,6 @@ fn recive_all_new_world(
                 Some(world) => {
                     match world {
                         Some(mut world) => {
-                            log::warn!("New world: {world:?}");
                             let (_, world_data) = world.get_fields_mut();
                             let res = world_data.iter().map(|(loc, _)| loc).try_for_each(|loc| {
                                 global_world_gate.chunk_load_tx.unbounded_send(loc.clone())
@@ -220,8 +222,6 @@ fn turtle_change_listener(
     for event in &mut select_turtle_reader {
         //Clean the world
         for entity in world_blocks.iter() {
-            //what the fuck?
-            log::warn!("aaa");
             commands.entity(entity).despawn();
         }
 
@@ -234,54 +234,63 @@ fn turtle_change_listener(
                 //let (chunk_x, chunk_y, chunk_z) = (new_turtle.x >> 4, (new_turtle.y >> 4) - 1, new_turtle.z >> 4);
 
                 spawn_async(async move {
-                    let url = format!("/turtle/{uuid}/world/");
+                    let resp = send_get_world_request(&uuid).await;
 
-                    #[cfg(target_arch = "wasm32")]
-                    {
-                        use gloo_net::http::Request;
-                        let resp = Request::get(&url).send().await;
+                    match resp {
+                        Ok(response) => {
+                            let world = match TurtleWorld::from_bytes(response) {
+                                Ok(val) => val,
+                                Err(err) => {
+                                    log::error!("Cannot convert backend response into world. Error: {err}");
+                                    tx.try_send(None).expect("Cannot send world result");
+                                    return;
+                                }
+                            };
 
-                        match resp {
-                            Ok(response) => {
-                                let bytes_vec: Bytes = match response.binary().await {
-                                    Ok(val) => val.into(),
-                                    Err(err) => {
-                                        log::error!("Something went wrong when converting response into bytes. Error: {err}");
-                                        tx.try_send(None).expect("Cannot send world result");
-                                        return;
-                                    }
-                                };
-
-                                let world = match TurtleWorld::from_bytes(bytes_vec) {
-                                    Ok(val) => val,
-                                    Err(err) => {
-                                        log::error!("Cannot convert backend response into world. Error: {err}");
-                                        tx.try_send(None).expect("Cannot send world result");
-                                        return;
-                                    }
-                                };
-
-                                tx.try_send(Some(world))
-                                    .expect("Cannot pass world into bevy system");
-                            }
-                            Err(err) => {
-                                log::error!(
-                                    "Something went wrong when fetching world. Error: {err}"
-                                );
-                                tx.try_send(None).expect("Cannot send world result");
-                            }
+                            tx.try_send(Some(world))
+                                .expect("Cannot pass world into bevy system");
+                        }
+                        Err(err) => {
+                            log::error!(
+                                "Something went wrong when fetching world. Error: {err}"
+                            );
+                            tx.try_send(None).expect("Cannot send world result");
                         }
                     }
 
-                    #[cfg(not(target_arch = "wasm32"))]
-                    {
-                        todo!()
-                    }
                 })
             }
             None => {}
         }
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+async fn send_get_world_request(uuid: &Uuid) -> Result<Bytes, Box<dyn Error + Send + Sync>> {
+    use crate::{HTTP_BACKEND_URL, REQWEST_CLIENT};
+
+    let path = format!("{}/turtle/{uuid}/world/", HTTP_BACKEND_URL);
+    let response = REQWEST_CLIENT
+        .get(path)
+        .send()
+        .await?
+        .bytes()
+        .await?;
+
+    Ok(response)
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn send_get_world_request(uuid: &Uuid) -> Result<Bytes, Box<dyn Error>> {
+    use gloo_net::http::Request;
+    let response = Request::get(&format!("/turtle/{uuid}/world/"))
+        .send()
+        .await?
+        .binary()
+        .await?
+        .into();
+
+    Ok(response)
 }
 
 fn block_change_detect(

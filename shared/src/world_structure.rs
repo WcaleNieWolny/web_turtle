@@ -351,8 +351,6 @@ pub fn into_byte_string(data: String) -> ByteString {
 
 #[cfg(test)]
 mod tests {
-    use bytestring::ByteString;
-
     use crate::world_structure::{TurtleWorld, TurtleChunk};
     use crate::world_structure::TurtleVoxel;
     use crate::world_structure::ChunkShape;
@@ -363,7 +361,8 @@ mod tests {
     fn test_encoding_and_decoding() {
         let mut world = TurtleWorld::new();
 
-        let _ = world.get_pallete_index("hello world");
+        let (palette, world_data) = world.get_fields_mut(); 
+        let _ = palette.get_pallete_index("hello world");
         let loc = ChunkLocation::xyz(0, 0, 0);
         let mut chunk = TurtleChunk {
             location: loc.clone(),
@@ -371,7 +370,7 @@ mod tests {
         };
 
         chunk.data[ChunkShape::linearize([15u32; 3]) as usize] = TurtleVoxel::id(12);
-        world.chunks.insert(loc, chunk);
+        world_data.chunks.insert(loc, chunk);
 
         let bytes = world.to_bytes().expect("Cannot serialize!");
         let deserialized = TurtleWorld::from_bytes(bytes).expect("Cannot deserialize");
