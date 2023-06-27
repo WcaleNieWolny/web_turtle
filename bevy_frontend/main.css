@@ -10,64 +10,7 @@
     flex: 1;
 }
 
-.navbar_div {
-    height: 64px;
-    width: 100%;
-    background-color: rgb(41 37 36);
-    margin-top: 0px;
-    display: flex;
-    flex-direction: row;
-}
-
 .game_div {
     flex: 1;
     display: flex;
-}
-
-.navbar_item_div {
-    background-color: rgb(6 182 212);
-    margin-left: 0.25rem;
-    margin-right: 0.25rem;
-    height: 4rem;
-    width: 4rem;
-    display: table;
-    vertical-align: middle;
-    text-align: center;
-    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    transition-duration: 150ms;
-}
-
-.navbar_item_div:hover {
-    background-color: rgb(34 197 94);
-}
-
-.navbar_item_text {
-    display: table-cell;
-    vertical-align: middle;
-    font-size: 1.25rem;
-    line-height: 1.75rem;
-    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-}
-
-.refresh_button {
-    width: 2.75rem;
-    height: 2.75rem;
-    align-self: flex-end;
-    margin: auto;
-    margin-right: 0.75rem;
-    background-color: rgb(6 182 212 / 1);
-    border-radius: 9999px;
-    border-width: 6px;
-    border-color: rgb(6 182 212 / 1);
-    border-style: solid;
-    padding: 0;
-}
-
-.green-border {
-    border-radius: 0.5rem;
-    border-width: 5px;
-    border-color: rgb(21 128 61);
-    border-style: solid;
-    box-sizing: border-box;
 }

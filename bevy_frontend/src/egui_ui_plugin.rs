@@ -12,6 +12,9 @@ use uuid::Uuid;
 
 use crate::{MainTurtle, spawn_async, SelectTurtleEvent};
 
+#[cfg(target_arch = "wasm32")]
+type DynError = Box<dyn Error + Sync + Send>;
+
 pub struct UiPlugin;
 
 #[derive(Resource, Deref)]
@@ -22,8 +25,8 @@ struct UiGate {
     all_turtles: Vec<JsonTurtle>,
     selected_turtle: Option<usize>,
     fetching: AtomicBool,
-    fetching_tx: Sender<Result<Vec<JsonTurtle>, Box<dyn Error + Send + Sync>>>,
-    fetching_rx: Receiver<Result<Vec<JsonTurtle>, Box<dyn Error + Send + Sync>>>
+    fetching_tx: Sender<Result<Vec<JsonTurtle>, DynError>>,
+    fetching_rx: Receiver<Result<Vec<JsonTurtle>, DynError>>
 }
 
 impl Plugin for UiPlugin {
@@ -224,6 +227,19 @@ fn recive_turtle_list(mut gate: ResMut<UiGate>) {
             },
         }
     }
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn fetch_turtles() -> Result<Vec<JsonTurtle>, DynError> {
+    use gloo_net::http::Request;
+
+    let resp = Request::get("/turtle/list/")
+        .send()
+        .await?
+        .json::<Vec<JsonTurtle>>()
+        .await?;
+
+    Ok(resp)
 }
 
 #[cfg(not(target_arch = "wasm32"))]

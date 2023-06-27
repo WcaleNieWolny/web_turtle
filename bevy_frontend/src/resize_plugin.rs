@@ -27,21 +27,18 @@ fn init_resize_system(mut commands: Commands) {
         let tx = unsafe { RESIZE_TX.as_mut().unwrap_unchecked() };
 
         let local_window = web_sys::window().expect("no global `window` exists");
-        let document = local_window
-            .document()
-            .expect("should have a document on window");
-        let navbar_div = document
-            .query_selector(".navbar_div")
-            .ok()
-            .expect("No navbar found")
-            .expect("No navbar found");
+
         let height = local_window
             .inner_height()
             .expect("No inner height")
             .as_f64()
-            .expect("Inner height not a number") as f32
-            - navbar_div.client_height() as f32;
-        let width = navbar_div.client_width() as f32;
+            .expect("Inner height not a number") as f32;
+
+        let width = local_window
+            .inner_width()
+            .expect("No inner height")
+            .as_f64()
+            .expect("Inner width not a number") as f32;
 
         tx.try_send((width, height)).expect("Cannot send data!")
     }) as Box<dyn FnMut(_)>);

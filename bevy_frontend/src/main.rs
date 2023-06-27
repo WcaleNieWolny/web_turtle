@@ -1,13 +1,11 @@
 mod move_plugin;
 
 mod block_destroy_plugin;
-#[cfg(not(target_arch = "wasm32"))]
 mod egui_ui_plugin;
-#[cfg(target_arch = "wasm32")]
-mod html_ui_plugin;
+mod world_plugin;
+
 #[cfg(target_arch = "wasm32")]
 mod resize_plugin;
-mod world_plugin;
 
 //mod inventory_plugin;
 
@@ -22,22 +20,14 @@ use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 use bevy_mod_raycast::RaycastSource;
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
+use egui_ui_plugin::UiPlugin;
 //use block_destroy_plugin::BlockDestroyPlugin;
 use futures::Future;
-#[cfg(target_arch = "wasm32")]
-use html_ui_plugin::UiPlugin;
 use move_plugin::MovePlugin;
-#[cfg(target_arch = "wasm32")]
-use resize_plugin::ResizePlugin;
 use shared::{JsonTurtle, WorldChange};
 #[cfg(not(target_arch = "wasm32"))]
 use tokio::runtime::{Builder, Runtime};
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen_futures::spawn_local;
 use world_plugin::WorldPlugin;
-
-//use inventory_plugin::InventoryPlugin;
-
 
 #[cfg(not(target_arch = "wasm32"))]
 static HTTP_BACKEND_URL: &str = "http://0.0.0.0:8000";
@@ -65,6 +55,7 @@ pub fn spawn_async<F>(future: F)
 where
     F: Future<Output = ()> + 'static,
 {
+    use wasm_bindgen_futures::spawn_local;
     spawn_local(future)
 }
 
@@ -120,12 +111,12 @@ impl Plugin for PlatformIndependentPlugins {
     fn build(&self, app: &mut App) {
         #[cfg(target_arch = "wasm32")]
         {
-            app.add_plugin(UiPlugin).add_plugin(ResizePlugin);
+            use resize_plugin::ResizePlugin;
+
+            app.add_plugin(ResizePlugin);
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
-            use egui_ui_plugin::UiPlugin;
-            app.add_plugin(UiPlugin);
         }
     }
 }
@@ -147,6 +138,7 @@ async fn async_main() {
         .add_plugin(MovePlugin)
         .add_plugin(WorldPlugin)
         .add_plugin(PlatformIndependentPlugins)
+        .add_plugin(UiPlugin)
         //.add_plugin(BlockDestroyPlugin)
         //.add_plugin(InventoryPlugin)
         .add_plugin(EguiPlugin)
