@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use bevy::render::mesh::{Indices, MeshVertexAttribute};
+use bevy::render::mesh::{Indices, MeshVertexAttribute, VertexAttributeValues};
 use bevy::render::render_resource::{PrimitiveTopology, VertexFormat};
 use bevy::{pbr::wireframe::Wireframe, prelude::*};
 use block_mesh::ndshape::{ConstShape, ConstShape3u32};
@@ -14,6 +14,7 @@ use futures::channel::mpsc::{
 use shared::world_structure::{ChunkLocation, TurtleVoxel, TurtleWorld};
 use uuid::Uuid;
 
+use crate::chunk_material::VoxelTerrainMesh;
 use crate::{spawn_async, BlockRaycastSet, SelectTurtleEvent, WorldChangeEvent};
 
 static CHUNKS_PER_FRAME_CAP: usize = 4;
@@ -91,6 +92,7 @@ fn load_chunk_from_queue(
     mut global_world_gate: ResMut<GlobalWorldGate>,
     mut global_world: ResMut<GlobalWorld>,
     mut meshes: ResMut<Assets<Mesh>>,
+    material: Res<crate::chunk_material::ChunkMaterialSingleton>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut commands: Commands,
 ) {
@@ -136,16 +138,26 @@ fn load_chunk_from_queue(
         let mut indices = Vec::with_capacity(num_indices);
         let mut positions = Vec::with_capacity(num_vertices);
         let mut normals = Vec::with_capacity(num_vertices);
-        for (group, face) in buffer
+
+        let mut data = Vec::with_capacity(num_vertices);
+        for (block_face_normal_index, (group, face)) in buffer 
             .quads
             .groups
-            .into_iter()
-            .zip(RIGHT_HANDED_Y_UP_CONFIG.faces.into_iter())
+            .as_ref()
+            .iter()
+            .zip(RIGHT_HANDED_Y_UP_CONFIG.faces.iter())
+            .enumerate()
         {
-            for quad in group.into_iter() {
+            for quad in group.iter() {
                 indices.extend_from_slice(&face.quad_mesh_indices(positions.len() as u32));
-                positions.extend_from_slice(&face.quad_mesh_positions(&quad, 1.0));
+                positions.extend_from_slice(&face.quad_mesh_positions(quad, 1.0));
                 normals.extend_from_slice(&face.quad_mesh_normals());
+                data.extend_from_slice(
+                    &[(block_face_normal_index as u32) << 8u32
+                        | chunk 
+                            .raw_voxel(quad.minimum.map(|x| x - 1).into())
+                            .as_mat_id() as u32; 4],
+                );
             }
         }
 
@@ -153,17 +165,18 @@ fn load_chunk_from_queue(
 
         render_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
         render_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-        render_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0; 2]; num_vertices]);
+        //render_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0; 2]; num_vertices]);
+        render_mesh.insert_attribute(VoxelTerrainMesh::ATTRIBUTE_DATA, VertexAttributeValues::Uint32(data));
         render_mesh.set_indices(Some(Indices::U32(indices.clone())));
 
         let mesh = meshes.add(render_mesh);
 
-        let mut material = StandardMaterial::from(Color::rgb(0.0, 0.0, 0.0));
-        material.perceptual_roughness = 0.9;
+        //let mut material = StandardMaterial::from(Color::RED);
+        //material.perceptual_roughness = 0.85;
 
-        commands.spawn(PbrBundle {
+        commands.spawn(MaterialMeshBundle {
             mesh,
-            material: materials.add(material),
+            material: (**material).clone(), 
             transform: Transform::from_xyz(
                 (chunk_loc.x * 16) as f32,
                 (chunk_loc.y * 16) as f32,

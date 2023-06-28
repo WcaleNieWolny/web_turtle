@@ -1,4 +1,4 @@
-use std::{env, num::TryFromIntError, path::PathBuf};
+use std::{env, num::TryFromIntError, path::PathBuf, str::Utf8Error};
 
 use bytes::{Bytes, BytesMut};
 use once_cell::sync::Lazy;
@@ -29,6 +29,8 @@ pub enum DatabaseActionError {
     IntError(#[from] TryFromIntError),
     #[error(transparent)]
     DynamicError(#[from] Box<dyn std::error::Error + Send + Sync>),
+    #[error("Data in json file is not UTF-8")]
+    UtfError(#[from] Utf8Error)
 }
 
 #[derive(Debug)]
@@ -52,6 +54,7 @@ impl TurtleDatabase {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(false)
             .open(json_file_path)
             .await?;
        
@@ -67,8 +70,9 @@ impl TurtleDatabase {
                 rotation: shared::JsonTurtleDirection::Forward,
             }
         } else {
-            let mut bytes = BytesMut::with_capacity(json_len.try_into()?);
-            json_file.read_buf(&mut bytes).await?;
+            let mut bytes = Vec::with_capacity(json_len.try_into()?);
+            json_file.read_to_end(&mut bytes).await?;
+            println!("{}", std::str::from_utf8(&bytes).unwrap());
             serde_json::from_slice(&bytes)?
         };
 
@@ -83,9 +87,9 @@ impl TurtleDatabase {
         let (turtle_world, turtle_bytes) = if world_len == 0 {
             (TurtleWorld::new(), Bytes::new())
         } else {
-            let mut bytes = BytesMut::with_capacity(world_len.try_into()?);
-            world_file.read_buf(&mut bytes).await?;
-            let bytes = bytes.freeze();
+            let mut bytes = Vec::with_capacity(world_len.try_into()?);
+            world_file.read_to_end(&mut bytes).await?;
+            let bytes: Bytes = bytes.into();
             (TurtleWorld::from_bytes(bytes.clone())?, bytes)
         };
 
@@ -115,6 +119,9 @@ impl TurtleDatabase {
 
         self.world_file.write_buf(&mut world_bytes).await?;
         self.json_file.write_all(&json_str).await?;
+
+        self.json_file.flush().await?;
+        self.json_file.flush().await?;
 
         Ok(())
     }

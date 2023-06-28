@@ -3,6 +3,7 @@ mod move_plugin;
 mod block_destroy_plugin;
 mod egui_ui_plugin;
 mod world_plugin;
+mod chunk_material;
 
 #[cfg(target_arch = "wasm32")]
 mod resize_plugin;
@@ -20,6 +21,7 @@ use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 use bevy_mod_raycast::RaycastSource;
 use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
+use chunk_material::ChunkMaterialPlugin;
 use egui_ui_plugin::UiPlugin;
 //use block_destroy_plugin::BlockDestroyPlugin;
 use futures::Future;
@@ -141,6 +143,7 @@ async fn async_main() {
         .add_plugin(UiPlugin)
         //.add_plugin(BlockDestroyPlugin)
         //.add_plugin(InventoryPlugin)
+        .add_plugin(ChunkMaterialPlugin)
         .add_plugin(EguiPlugin)
         .add_plugin(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
         .add_plugin(bevy::diagnostic::LogDiagnosticsPlugin::default())

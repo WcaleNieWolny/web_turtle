@@ -12,7 +12,6 @@ use uuid::Uuid;
 
 use crate::{MainTurtle, spawn_async, SelectTurtleEvent};
 
-#[cfg(target_arch = "wasm32")]
 type DynError = Box<dyn Error + Sync + Send>;
 
 pub struct UiPlugin;

@@ -78,6 +78,10 @@ impl TurtleVoxel {
             id
         }
     }
+
+    pub fn as_mat_id(&self) -> u8 {
+        10
+    }
 }
 
 impl Default for TurtleWorldPalette {
@@ -121,6 +125,10 @@ impl TurtleChunk {
         let data = self.data.get_mut(ChunkShape::linearize([(x + 1).try_into()?, (y + 1).try_into()?, (z + 1).try_into()?]) as usize).ok_or::<String>("Something went really wrong, linearize is out of bounds".into())?;
 
         func(data)
+    }
+
+    pub fn raw_voxel(&self, loc: [u32; 3]) -> &TurtleVoxel {
+        &self.data[ChunkShape::linearize(loc) as usize] 
     }
 
     pub fn voxels(&self) -> &[TurtleVoxel; ChunkShape::SIZE as usize] {

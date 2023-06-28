@@ -283,6 +283,7 @@ async fn handle_socket(mut socket: WebSocket, _addr: SocketAddr, turtles: Turtle
         Ok(val) => val,
         Err(err) => {
             error!("Database error for turtle {uuid:?} Err: {err}");
+            Err::<(), DatabaseActionError>(err).unwrap(); 
             close_socket!();
             return;
         }
