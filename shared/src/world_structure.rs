@@ -348,6 +348,10 @@ impl TurtleWorldPalette {
             },
         }
     }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, ByteString> {
+        self.palette.iter()
+    }
 }
 
 #[inline(always)]

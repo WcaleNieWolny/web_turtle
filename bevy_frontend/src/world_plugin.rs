@@ -14,7 +14,7 @@ use futures::channel::mpsc::{
 use shared::world_structure::{ChunkLocation, TurtleVoxel, TurtleWorld};
 use uuid::Uuid;
 
-use crate::chunk_material::VoxelTerrainMesh;
+use crate::chunk_material::{VoxelTerrainMesh, ChunkMaterialSingleton};
 use crate::{spawn_async, BlockRaycastSet, SelectTurtleEvent, WorldChangeEvent};
 
 static CHUNKS_PER_FRAME_CAP: usize = 4;
@@ -33,8 +33,8 @@ struct GlobalWorldGate {
     chunk_load_tx: UnboundedSender<ChunkLocation>,
 }
 
-#[derive(Resource)]
-struct GlobalWorld {
+#[derive(Resource, Deref)]
+pub struct GlobalWorld {
     world: Option<TurtleWorld>,
 }
 
@@ -154,7 +154,7 @@ fn load_chunk_from_queue(
                 normals.extend_from_slice(&face.quad_mesh_normals());
                 data.extend_from_slice(
                     &[(block_face_normal_index as u32) << 8u32
-                        | chunk 
+                        | chunk
                             .raw_voxel(quad.minimum.map(|x| x - 1).into())
                             .as_mat_id() as u32; 4],
                 );
@@ -195,6 +195,7 @@ fn load_chunk_from_queue(
 fn recive_all_new_world(
     mut global_world_gate: ResMut<GlobalWorldGate>,
     mut global_world: ResMut<GlobalWorld>,
+    //mut material_singletone: ResMut<ChunkMaterialSingleton>
 ) {
     match global_world_gate.get_all_blocks_rx.try_next() {
         Ok(val) => {
@@ -213,6 +214,7 @@ fn recive_all_new_world(
                             }
 
                             global_world.world = Some(world);
+                            //material_singletone.set_changed();
                         }
                         None => return, //Something went wrong
                     }

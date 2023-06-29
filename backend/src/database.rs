@@ -1,10 +1,11 @@
-use std::{env, num::TryFromIntError, path::PathBuf, str::Utf8Error};
+use std::{env, num::TryFromIntError, path::PathBuf, str::Utf8Error, io::SeekFrom};
 
 use bytes::{Bytes, BytesMut};
 use once_cell::sync::Lazy;
 use shared::{JsonTurtle, world_structure::TurtleWorld};
+use tempfile::NamedTempFile;
 use thiserror::Error;
-use tokio::{fs::{File, OpenOptions}, io::{AsyncReadExt, AsyncWriteExt}};
+use tokio::{fs::{File, OpenOptions}, io::{AsyncReadExt, AsyncWriteExt, AsyncSeekExt}};
 use uuid::Uuid;
 
 //this is allowed to panic, if it ever fails all of our code is usless
@@ -70,9 +71,10 @@ impl TurtleDatabase {
                 rotation: shared::JsonTurtleDirection::Forward,
             }
         } else {
-            let mut bytes = Vec::with_capacity(json_len.try_into()?);
+            let mut bytes = Vec::new();
             json_file.read_to_end(&mut bytes).await?;
-            println!("{}", std::str::from_utf8(&bytes).unwrap());
+            println!("LL: {bytes:x?}");
+            println!("??: {}", std::str::from_utf8(&bytes).unwrap());
             serde_json::from_slice(&bytes)?
         };
 
@@ -114,14 +116,25 @@ impl TurtleDatabase {
 
         self.raw_world_bytes = world_bytes.clone();
 
-        self.world_file.set_len(0).await?;
-        self.json_file.set_len(0).await?;
+        let named_tmp_world_file = NamedTempFile::new_in(DATA_DIR.clone())?;
+        let named_tmp_json_file = NamedTempFile::new_in(DATA_DIR.clone())?;
+        let (named_tmp_json_handle, named_tmp_json_path) = named_tmp_json_file.into_parts(); 
+        let (named_tmp_world_handle, named_tmp_world_path) = named_tmp_world_file.into_parts(); 
 
-        self.world_file.write_buf(&mut world_bytes).await?;
-        self.json_file.write_all(&json_str).await?;
+        let mut tmp_world_file = File::from_std(named_tmp_world_handle);
+        let mut tmp_json_file = File::from_std(named_tmp_json_handle);
 
-        self.json_file.flush().await?;
-        self.json_file.flush().await?;
+        tmp_world_file.write_all(&mut world_bytes).await?;
+        tmp_json_file.write_all(&json_str).await?;
+
+        tmp_world_file.flush().await?;
+        tmp_json_file.flush().await?;
+
+        let mut real_path = DATA_DIR.clone();
+        real_path.push(self.turtle_data.uuid.simple().to_string());
+
+        tokio::fs::rename(named_tmp_json_path, real_path.with_extension("json")).await?;
+        tokio::fs::rename(named_tmp_world_path, real_path.with_extension("world")).await?;
 
         Ok(())
     }
