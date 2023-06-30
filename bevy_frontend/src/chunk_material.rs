@@ -20,6 +20,11 @@ impl VoxelTerrainMesh {
         MeshVertexAttribute::new("Vertex_Data", 0x696969, VertexFormat::Uint32);
 }
 
+#[derive(Resource, Deref, Default)]
+struct GpuMaterialGate {
+    last_world_pallete_size: Option<usize>,
+}
+
 #[derive(ShaderType, Clone, Copy, Default)]
 pub struct GpuVoxelMaterial {
     base_color: Color,
@@ -54,7 +59,7 @@ impl Material for GpuTerrainUniforms {
     }
 
     fn fragment_shader() -> bevy::render::render_resource::ShaderRef {
-        "shaders/terrain_pipeline.wgsl".into()
+        "shaders/terrain_pipeline_frag.wgsl".into()
     }
 
     fn specialize(
@@ -75,11 +80,19 @@ impl Material for GpuTerrainUniforms {
 fn update_chunk_material_singleton(
     mut commands: Commands,
     mut materials: ResMut<Assets<GpuTerrainUniforms>>,
-    chunk_material: ResMut<ChunkMaterialSingleton>,
     mut chunk_entities: Query<(Entity, &mut Handle<GpuTerrainUniforms>)>,
-    world: Res<GlobalWorld>
+    world: Res<GlobalWorld>,
+    mut gate: ResMut<GpuMaterialGate>,
 ) {
-    if chunk_material.is_changed() && world.is_changed() {
+    let world_option: &Option<TurtleWorld> = &*world;
+
+    if world_option.as_ref().is_some_and(|world| {
+            if let Some(old_world) = gate.last_world_pallete_size {
+                return old_world != world.pallete.len();
+            };
+            return true;
+        })
+    {
         println!("CHANGE RERENDER");
         let mut gpu_mats = GpuTerrainUniforms {
             materials: [GpuVoxelMaterial {
@@ -93,8 +106,7 @@ fn update_chunk_material_singleton(
             render_distance: 32,
         };
 
-        let world: &Option<TurtleWorld> = &*world;
-        if let Some(world) = world {
+        if let Some(world) = world_option {
             let TurtleWorld { pallete, .. } = world;
 
             pallete
@@ -127,6 +139,8 @@ fn update_chunk_material_singleton(
             *mat = chunk_material.clone();
         }
     }
+
+    gate.last_world_pallete_size = world_option.as_ref().map(|world| world.pallete.len());
 }
 
 #[derive(Resource, Deref, DerefMut)]
@@ -150,9 +164,9 @@ impl Plugin for ChunkMaterialPlugin {
         // @todo: figure out race conditions w/ other systems
         app.add_plugin(MaterialPlugin::<GpuTerrainUniforms>::default())
             .init_resource::<ChunkMaterialSingleton>()
+            .insert_resource(GpuMaterialGate::default())
             .add_system(
                 update_chunk_material_singleton
-                    .run_if(resource_changed::<GlobalWorld>())
                     .in_set(ChunkMaterialSet)
                     .in_base_set(CoreSet::Update),
             );

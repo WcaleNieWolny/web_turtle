@@ -14,7 +14,7 @@ use futures::channel::mpsc::{
 use shared::world_structure::{ChunkLocation, TurtleVoxel, TurtleWorld};
 use uuid::Uuid;
 
-use crate::chunk_material::{VoxelTerrainMesh, ChunkMaterialSingleton};
+use crate::chunk_material::{ChunkMaterialSingleton, VoxelTerrainMesh};
 use crate::{spawn_async, BlockRaycastSet, SelectTurtleEvent, WorldChangeEvent};
 
 static CHUNKS_PER_FRAME_CAP: usize = 4;
@@ -140,7 +140,7 @@ fn load_chunk_from_queue(
         let mut normals = Vec::with_capacity(num_vertices);
 
         let mut data = Vec::with_capacity(num_vertices);
-        for (block_face_normal_index, (group, face)) in buffer 
+        for (block_face_normal_index, (group, face)) in buffer
             .quads
             .groups
             .as_ref()
@@ -155,7 +155,7 @@ fn load_chunk_from_queue(
                 data.extend_from_slice(
                     &[(block_face_normal_index as u32) << 8u32
                         | chunk
-                            .raw_voxel(quad.minimum.map(|x| x - 1).into())
+                            .raw_voxel(&quad.minimum)
                             .as_mat_id() as u32; 4],
                 );
             }
@@ -166,7 +166,10 @@ fn load_chunk_from_queue(
         render_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
         render_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
         //render_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0; 2]; num_vertices]);
-        render_mesh.insert_attribute(VoxelTerrainMesh::ATTRIBUTE_DATA, VertexAttributeValues::Uint32(data));
+        render_mesh.insert_attribute(
+            VoxelTerrainMesh::ATTRIBUTE_DATA,
+            VertexAttributeValues::Uint32(data),
+        );
         render_mesh.set_indices(Some(Indices::U32(indices.clone())));
 
         let mesh = meshes.add(render_mesh);
@@ -176,11 +179,11 @@ fn load_chunk_from_queue(
 
         commands.spawn(MaterialMeshBundle {
             mesh,
-            material: (**material).clone(), 
+            material: (**material).clone(),
             transform: Transform::from_xyz(
-                (chunk_loc.x * 16) as f32,
-                (chunk_loc.y * 16) as f32,
-                (chunk_loc.z * 16) as f32,
+                (chunk_loc.x * 16) as f32 - 1.,
+                (chunk_loc.y * 16) as f32 - 0.5,
+                (chunk_loc.z * 16) as f32 - 1.,
             ),
             ..Default::default()
         });
@@ -256,7 +259,9 @@ fn turtle_change_listener(
                             let world = match TurtleWorld::from_bytes(response) {
                                 Ok(val) => val,
                                 Err(err) => {
-                                    log::error!("Cannot convert backend response into world. Error: {err}");
+                                    log::error!(
+                                        "Cannot convert backend response into world. Error: {err}"
+                                    );
                                     tx.try_send(None).expect("Cannot send world result");
                                     return;
                                 }
@@ -266,13 +271,10 @@ fn turtle_change_listener(
                                 .expect("Cannot pass world into bevy system");
                         }
                         Err(err) => {
-                            log::error!(
-                                "Something went wrong when fetching world. Error: {err}"
-                            );
+                            log::error!("Something went wrong when fetching world. Error: {err}");
                             tx.try_send(None).expect("Cannot send world result");
                         }
                     }
-
                 })
             }
             None => {}
@@ -285,12 +287,7 @@ async fn send_get_world_request(uuid: &Uuid) -> Result<Bytes, Box<dyn Error + Se
     use crate::{HTTP_BACKEND_URL, REQWEST_CLIENT};
 
     let path = format!("{}/turtle/{uuid}/world/", HTTP_BACKEND_URL);
-    let response = REQWEST_CLIENT
-        .get(path)
-        .send()
-        .await?
-        .bytes()
-        .await?;
+    let response = REQWEST_CLIENT.get(path).send().await?.bytes().await?;
 
     Ok(response)
 }

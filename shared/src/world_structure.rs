@@ -79,8 +79,9 @@ impl TurtleVoxel {
         }
     }
 
+    //TODO: CHANGE THIS HORRIBLE LOGIC!
     pub fn as_mat_id(&self) -> u8 {
-        10
+        self.id as u8
     }
 }
 
@@ -127,8 +128,8 @@ impl TurtleChunk {
         func(data)
     }
 
-    pub fn raw_voxel(&self, loc: [u32; 3]) -> &TurtleVoxel {
-        &self.data[ChunkShape::linearize(loc) as usize] 
+    pub fn raw_voxel(&self, pos: &[u32; 3]) -> &TurtleVoxel {
+        &self.data[ChunkShape::linearize(*pos) as usize]
     }
 
     pub fn voxels(&self) -> &[TurtleVoxel; ChunkShape::SIZE as usize] {
@@ -351,6 +352,10 @@ impl TurtleWorldPalette {
 
     pub fn iter(&self) -> std::slice::Iter<'_, ByteString> {
         self.palette.iter()
+    }
+
+    pub fn len(&self) -> usize {
+        self.palette.len()
     }
 }
 

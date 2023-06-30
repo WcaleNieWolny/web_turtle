@@ -1,9 +1,9 @@
 mod move_plugin;
 
 mod block_destroy_plugin;
+mod chunk_material;
 mod egui_ui_plugin;
 mod world_plugin;
-mod chunk_material;
 
 #[cfg(target_arch = "wasm32")]
 mod resize_plugin;
@@ -72,9 +72,8 @@ static TOKIO_RUNTIME: once_cell::sync::Lazy<Runtime> = once_cell::sync::Lazy::ne
 });
 
 #[cfg(not(target_arch = "wasm32"))]
-static REQWEST_CLIENT: once_cell::sync::Lazy<reqwest::Client> = once_cell::sync::Lazy::new(|| {
-    reqwest::Client::new()
-});
+static REQWEST_CLIENT: once_cell::sync::Lazy<reqwest::Client> =
+    once_cell::sync::Lazy::new(|| reqwest::Client::new());
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn spawn_async<F>(future: F)
@@ -118,8 +117,7 @@ impl Plugin for PlatformIndependentPlugins {
             app.add_plugin(ResizePlugin);
         }
         #[cfg(not(target_arch = "wasm32"))]
-        {
-        }
+        {}
     }
 }
 

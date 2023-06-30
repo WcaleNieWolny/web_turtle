@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 use bevy_mod_raycast::{DefaultRaycastingPlugin, RaycastMethod, RaycastSource, RaycastSystem};
-use uuid::Uuid;
-use std::error::Error;
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use shared::{DestroyBlockResponse, JsonTurtleDirection};
+use std::error::Error;
+use uuid::Uuid;
 
 #[cfg(target_arch = "wasm32")]
 use {
@@ -150,7 +150,10 @@ fn detect_block_destroy_from_mouse(
 }
 
 #[cfg(target_arch = "wasm32")]
-async fn send_block_destroy_request(direction: &JsonTurtleDirection, uuid: &Uuid) -> Result<DestroyBlockResponse, Box<dyn Error>> {
+async fn send_block_destroy_request(
+    direction: &JsonTurtleDirection,
+    uuid: &Uuid,
+) -> Result<DestroyBlockResponse, Box<dyn Error>> {
     use gloo_net::http::Request;
 
     let response = Request::put(&format!("/turtle/{uuid}/destroy/"))

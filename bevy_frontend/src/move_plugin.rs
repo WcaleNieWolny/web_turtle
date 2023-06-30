@@ -1,10 +1,10 @@
-use std::{time::Duration, error::Error};
+use std::{error::Error, time::Duration};
 
 use bevy::prelude::*;
 use bevy_panorbit_camera::PanOrbitCamera;
 use futures::channel::mpsc::{self, Receiver, Sender};
+use shared::{JsonTurtle, JsonTurtleDirection, TurtleMoveResponse};
 use uuid::Uuid;
-use shared::{JsonTurtleDirection, TurtleMoveResponse, JsonTurtle};
 
 use crate::{
     spawn_async, MainCamera, MainTurtle, MainTurtleObject, SelectTurtleEvent, WorldChangeEvent,
@@ -62,7 +62,7 @@ fn keybord_input(
         JsonTurtleDirection::Left
     } else if keys.pressed(KeyCode::D) {
         JsonTurtleDirection::Right
-   } else {
+    } else {
         return;
     };
 
@@ -85,46 +85,48 @@ fn keybord_input(
     //Clone so we can move to the future
     let main_turtle = main_turtle.clone();
     spawn_async(async move {
-            let resp = send_move_request(&direction, &uuid).await;
+        let resp = send_move_request(&direction, &uuid).await;
 
-            match resp {
-                Ok(result) => {
-                    tx.try_send(Some(result))
-                        .expect("Cannot notify bevy move system (Ok)");
-                }
-                Err(err) => {
-                    log::error!("Cannot send move request: {err}");
-                    tx.try_send(None)
-                        .expect("Cannot notify bevy move system (Err)");
-                    return;
-                }
+        match resp {
+            Ok(result) => {
+                tx.try_send(Some(result))
+                    .expect("Cannot notify bevy move system (Ok)");
             }
+            Err(err) => {
+                log::error!("Cannot send move request: {err}");
+                tx.try_send(None)
+                    .expect("Cannot notify bevy move system (Err)");
+                return;
+            }
+        }
 
-            main_turtle
-                .write()
-                .expect("Cannot lock main turtle, should never happen!")
-                .as_mut()
-                .and_then(|main_turtle| {
-                    match direction {
-                        JsonTurtleDirection::Right | JsonTurtleDirection::Left => {
-                            main_turtle.rotation.rotate_self(&direction);
-                        }
-                        JsonTurtleDirection::Backward | JsonTurtleDirection::Forward => {
-                            let (x_change, y_change, z_change) =
-                                direction.to_turtle_move_diff(&main_turtle.rotation);
-                            main_turtle.x += x_change;
-                            main_turtle.y += y_change;
-                            main_turtle.z += z_change;
-                        }
-                    };
-                    None::<()>
-                });
+        main_turtle
+            .write()
+            .expect("Cannot lock main turtle, should never happen!")
+            .as_mut()
+            .and_then(|main_turtle| {
+                match direction {
+                    JsonTurtleDirection::Right | JsonTurtleDirection::Left => {
+                        main_turtle.rotation.rotate_self(&direction);
+                    }
+                    JsonTurtleDirection::Backward | JsonTurtleDirection::Forward => {
+                        let (x_change, y_change, z_change) =
+                            direction.to_turtle_move_diff(&main_turtle.rotation);
+                        main_turtle.x += x_change;
+                        main_turtle.y += y_change;
+                        main_turtle.z += z_change;
+                    }
+                };
+                None::<()>
+            });
     })
 }
 
-
 #[cfg(target_arch = "wasm32")]
-async fn send_move_request(direction: &JsonTurtleDirection, uuid: &Uuid) -> Result<TurtleMoveResponse, Box<dyn Error>> {
+async fn send_move_request(
+    direction: &JsonTurtleDirection,
+    uuid: &Uuid,
+) -> Result<TurtleMoveResponse, Box<dyn Error>> {
     use gloo_net::http::Request;
 
     let response = Request::put(&format!("/turtle/{uuid}/move/"))
@@ -138,7 +140,10 @@ async fn send_move_request(direction: &JsonTurtleDirection, uuid: &Uuid) -> Resu
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-async fn send_move_request(direction: &JsonTurtleDirection, uuid: &Uuid) -> Result<TurtleMoveResponse, Box<dyn Error + Send + Sync>> {
+async fn send_move_request(
+    direction: &JsonTurtleDirection,
+    uuid: &Uuid,
+) -> Result<TurtleMoveResponse, Box<dyn Error + Send + Sync>> {
     use crate::{HTTP_BACKEND_URL, REQWEST_CLIENT};
 
     let path = format!("{}/turtle/{uuid}/move/", HTTP_BACKEND_URL);
@@ -147,7 +152,8 @@ async fn send_move_request(direction: &JsonTurtleDirection, uuid: &Uuid) -> Resu
         .body(direction.to_string())
         .send()
         .await?
-        .json::<TurtleMoveResponse>().await?;
+        .json::<TurtleMoveResponse>()
+        .await?;
 
     Ok(response)
 }
