@@ -323,9 +323,9 @@ impl TurtleWorldData {
     }
 
     pub fn remove_global_block_by_xyz(&mut self, x: i32, y: i32, z: i32) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let chunk_y: i8 = (y << 4).try_into()?;
+        let chunk_y: i8 = (y >> 4).try_into()?;
 
-        let (chunk_x, chunk_z) = (x << 4, z << 4);
+        let (chunk_x, chunk_z) = (x >> 4, z >> 4);
         let chunk_loc = ChunkLocation::xyz(chunk_x, chunk_y, chunk_z);
 
         let chunk = self.chunks.get_mut(&chunk_loc).ok_or("Given block does not exist (chunk_err)".to_owned())?;

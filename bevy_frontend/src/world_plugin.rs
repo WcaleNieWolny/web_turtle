@@ -23,8 +23,10 @@ static CHUNKS_PER_FRAME_CAP: usize = 4;
 pub struct WorldPlugin;
 
 //Marker for a world block
-#[derive(Component)]
-struct WorldBlock;
+#[derive(Component, Deref)]
+struct WorldChunk {
+    location: ChunkLocation
+}
 
 #[derive(Resource)]
 struct GlobalWorldGate {
@@ -94,6 +96,7 @@ fn load_chunk_from_queue(
     mut global_world: ResMut<GlobalWorld>,
     mut meshes: ResMut<Assets<Mesh>>,
     material: Res<crate::chunk_material::ChunkMaterialSingleton>,
+    world_chunks: Query<(Entity, &WorldChunk)>,
     mut commands: Commands,
 ) {
     let world = match global_world.world.as_mut() {
@@ -114,6 +117,14 @@ fn load_chunk_from_queue(
                 return;
             }
         };
+
+        let previous_mesh = world_chunks
+            .iter()
+            .find(|(_, loc)| loc.location == chunk_loc);
+
+        if let Some((previous_mesh, ..)) = previous_mesh {
+            commands.entity(previous_mesh).despawn();
+        }
 
         let chunk = match world_data.get_mut_chunk_by_loc(&chunk_loc) {
             Some(val) => val,
@@ -177,7 +188,7 @@ fn load_chunk_from_queue(
         //let mut material = StandardMaterial::from(Color::RED);
         //material.perceptual_roughness = 0.85;
 
-        commands.spawn(MaterialMeshBundle {
+        commands.spawn((MaterialMeshBundle {
             mesh,
             material: (**material).clone(),
             transform: Transform::from_xyz(
@@ -186,10 +197,11 @@ fn load_chunk_from_queue(
                 (chunk_loc.z * 16) as f32 - 1.,
             ),
             ..Default::default()
-        });
+        }, WorldChunk { location: chunk_loc.clone() }));
 
         i += 1;
         if i == CHUNKS_PER_FRAME_CAP {
+            log::warn!("CAP");
             return;
         }
     }
@@ -234,7 +246,7 @@ fn recive_all_new_world(
 fn turtle_change_listener(
     mut commands: Commands,
     mut select_turtle_reader: EventReader<SelectTurtleEvent>,
-    world_blocks: Query<Entity, With<WorldBlock>>,
+    world_blocks: Query<Entity, With<WorldChunk>>,
     global_world_gate: Res<GlobalWorldGate>,
 ) {
     for event in &mut select_turtle_reader {
@@ -364,8 +376,12 @@ fn block_change_detect(
         chunks_to_rerender.push(chunk_loc);
     }
 
+    log::warn!("TO REM: {:?}", chunks_to_rerender);
+
     chunks_to_rerender.sort();
     chunks_to_rerender.dedup();
+
+    log::warn!("AFT TO REM: {:?}", chunks_to_rerender);
 
     for location in chunks_to_rerender {
         global_world_gate.chunk_load_tx.unbounded_send(location).expect("Cannot send chunk to rerender");

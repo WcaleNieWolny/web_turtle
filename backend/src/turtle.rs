@@ -203,11 +203,12 @@ impl Turtle {
 
                 if block == "\"No block to inspect\"" {
                     //this is ugly, but it works
-                    if db_block.is_none() || db_block.is_some_and(|data| data.id == 0)
+                    if db_block.is_none() || db_block.as_ref().is_some_and(|data| data.id == 0)
                     {
                         return Ok(None);
                     }
 
+                    tracing::warn!("Attempt to remvoe block. {} {}", db_block.is_none(), db_block.is_some_and(|data| data.id == 0));
                     chunks.remove_global_block_by_xyz(x, y, z)?;
                     let action = WorldChangeAction::Delete(WorldChangeDeleteBlock {});
                     return Ok(Some(WorldChange { x, y, z, action }));

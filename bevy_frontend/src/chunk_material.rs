@@ -137,7 +137,8 @@ fn update_chunk_material_singleton(
         commands.insert_resource(ChunkMaterialSingleton(chunk_material.clone()));
 
         for (_, mut mat) in &mut chunk_entities {
-            *mat = chunk_material.clone();
+            *mat = chunk_material.clone(); 
+            mat.set_changed();
         }
     }
 
