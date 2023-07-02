@@ -157,16 +157,21 @@ pub struct WorldChange {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct WorldChangeNewBlock {
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
+pub enum WorldChangePaletteEnum {
+    Insert { i: usize, name: String },
+    GetOld { i: usize }
 }
 
-//This might change in the future
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(transparent)]
+pub struct WorldChangeNewBlock {
+    pub palette: WorldChangePaletteEnum 
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(transparent)]
 pub struct WorldChangeUpdateBlock {
-    pub color: String
+    pub palette: WorldChangePaletteEnum 
 }
 
 #[derive(Serialize, Deserialize, Debug)]

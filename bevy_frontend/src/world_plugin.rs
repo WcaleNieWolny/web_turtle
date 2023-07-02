@@ -11,7 +11,8 @@ use bytes::Bytes;
 use futures::channel::mpsc::{
     channel, unbounded, Receiver, Sender, UnboundedReceiver, UnboundedSender,
 };
-use shared::world_structure::{ChunkLocation, TurtleVoxel, TurtleWorld};
+use shared::{WorldChangePaletteEnum, WorldChange};
+use shared::world_structure::{ChunkLocation, TurtleVoxel, TurtleWorld, TurtleWorldPalette, TurtleWorldData};
 use uuid::Uuid;
 
 use crate::chunk_material::{ChunkMaterialSingleton, VoxelTerrainMesh};
@@ -93,7 +94,6 @@ fn load_chunk_from_queue(
     mut global_world: ResMut<GlobalWorld>,
     mut meshes: ResMut<Assets<Mesh>>,
     material: Res<crate::chunk_material::ChunkMaterialSingleton>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     mut commands: Commands,
 ) {
     let world = match global_world.world.as_mut() {
@@ -305,57 +305,69 @@ async fn send_get_world_request(uuid: &Uuid) -> Result<Bytes, Box<dyn Error>> {
     Ok(response)
 }
 
-fn block_change_detect(
-    mut commands: Commands,
-    mut world_change_events: EventReader<WorldChangeEvent>,
-    world_blocks: Query<(&Transform, &Handle<StandardMaterial>, Entity), With<WorldBlock>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+fn update_voxel_color(
+    palette_enum: &WorldChangePaletteEnum,
+    palette: &mut TurtleWorldPalette,
+    world_data: &mut TurtleWorldData,
+    chunk_loc: &ChunkLocation,
+    change: &WorldChange
 ) {
+    if let shared::WorldChangePaletteEnum::Insert { i, name } = palette_enum {
+        palette.insert(*i, name.clone());
+    }
+
+    let id: u16 = match palette_enum {
+        shared::WorldChangePaletteEnum::Insert { i, .. } => *i,
+        shared::WorldChangePaletteEnum::GetOld { i } => *i,
+    }.try_into().expect("Usize bigger then u16");
+
+    let chunk = world_data.force_get_mut_chunk_by_loc(chunk_loc);
+    chunk.update_voxel_by_global_xyz(change.x, change.y, change.z, |voxel| {
+        voxel.id = id;
+        Ok(())
+    }).unwrap();
+}
+
+fn block_change_detect(
+    mut world_change_events: EventReader<WorldChangeEvent>,
+    mut global_world: ResMut<GlobalWorld>,
+    global_world_gate: ResMut<GlobalWorldGate>,
+) {
+    if world_change_events.is_empty() {
+        return
+    };
+
+    let mut chunks_to_rerender = Vec::<ChunkLocation>::with_capacity(world_change_events.len());
+    let world = global_world.world.as_mut().expect("Cannot get mutable turtle world");
+    let (palette, world_data) = world.get_fields_mut();
+
     for change in &mut world_change_events {
         let change = &change.0;
+        let chunk_loc = ChunkLocation::from_global_xyz(change.x, change.y, change.z);
+
         match &change.action {
             shared::WorldChangeAction::New(new_block) => {
-                commands.spawn((
-                    PbrBundle {
-                        mesh: meshes.add(shape::Cube { size: 1.0 }.into()),
-                        material: materials
-                            .add(Color::rgb_u8(new_block.r, new_block.g, new_block.b).into()),
-                        transform: Transform::from_xyz(
-                            0.5 + change.x as f32,
-                            change.y as f32 + 1.0,
-                            0.5 + change.z as f32,
-                        ),
-                        ..default()
-                    },
-                    WorldBlock,
-                    bevy_mod_raycast::RaycastMesh::<BlockRaycastSet>::default(),
-                ));
+                update_voxel_color(&new_block.palette, palette, world_data, &chunk_loc, change);
             }
             shared::WorldChangeAction::Update(update) => {
-                let block = world_blocks.iter().find(|(loc, _, _)| {
-                    loc.translation.x == change.x as f32 + 0.5
-                        && loc.translation.y == change.y as f32 + 1.0
-                        && loc.translation.z == change.z as f32 + 0.5
-                });
-
-                if let Some((_, handle, _)) = block {
-                    let color = &mut materials.get_mut(handle).unwrap();
-                    color.base_color = Color::hex(&update.color).unwrap()
-                }
+                update_voxel_color(&update.palette, palette, world_data, &chunk_loc, change);
             }
             shared::WorldChangeAction::Delete(_) => {
-                let block = world_blocks.iter().find(|(loc, _, _)| {
-                    loc.translation.x == change.x as f32 + 0.5
-                        && loc.translation.y == change.y as f32 + 1.0
-                        && loc.translation.z == change.z as f32 + 0.5
-                });
-
-                log::warn!("Some: {}", block.is_some());
-                if let Some((_, _, entity)) = block {
-                    commands.entity(entity).despawn();
-                }
+                let chunk = world_data.force_get_mut_chunk_by_loc(&chunk_loc);
+                chunk.update_voxel_by_global_xyz(change.x, change.y, change.z, |voxel| {
+                    voxel.id = 0;
+                    Ok(())
+                }).unwrap();
             }
         };
+
+        chunks_to_rerender.push(chunk_loc);
+    }
+
+    chunks_to_rerender.sort();
+    chunks_to_rerender.dedup();
+
+    for location in chunks_to_rerender {
+        global_world_gate.chunk_load_tx.unbounded_send(location).expect("Cannot send chunk to rerender");
     }
 }

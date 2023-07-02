@@ -112,9 +112,10 @@ fn update_chunk_material_singleton(
             pallete
                 .iter()
                 .enumerate()
-                .skip(1) //Skip air block
+                //.skip(1) //Skip air block
                 .take_while(|(i, _)| *i < 256)
                 .map(|(i, item_name)| {
+                    log::warn!("{item_name}");
                     let hash = seahash::hash(item_name.as_bytes());
                     let hash: [u8; 8] = hash.to_le_bytes();
 

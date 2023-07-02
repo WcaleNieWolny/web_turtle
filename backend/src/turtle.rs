@@ -1,13 +1,13 @@
 use std::{time::Duration, num::TryFromIntError};
 
 use serde_json::Value;
-use shared::{JsonTurtleDirection, WorldChange, WorldChangeAction, WorldChangeDeleteBlock, TurtleBlock, WorldChangeUpdateBlock, WorldChangeNewBlock, DestroyBlockResponse, JsonTurtle, world_structure::{TurtleWorld, TurtleVoxel, TurtleChunk, ChunkLocation}};
+use shared::{JsonTurtleDirection, WorldChange, WorldChangeAction, WorldChangeDeleteBlock, TurtleBlock, WorldChangeUpdateBlock, WorldChangeNewBlock, DestroyBlockResponse, world_structure::{TurtleWorld, TurtleVoxel}, WorldChangePaletteEnum};
 use thiserror::Error;
 use tokio::{sync::{oneshot, mpsc::{self, Sender}}, time::timeout};
 use tracing::error;
 use uuid::Uuid;
 
-use crate::{database::{DatabaseActionError, TurtleDatabase, self}, world};
+use crate::database::{DatabaseActionError, TurtleDatabase};
 
 //Lua inspect logic
 static INSPECT_DOWN_PAYLOAD: &str = "local has_block, data = turtle.inspectDown() return textutils.serialiseJSON(data)";
@@ -203,10 +203,7 @@ impl Turtle {
 
                 if block == "\"No block to inspect\"" {
                     //this is ugly, but it works
-                    if db_block.is_none() || match db_block {
-                            None => false,
-                            Some(x) => x.id == 0,
-                        }
+                    if db_block.is_none() || db_block.is_some_and(|data| data.id == 0)
                     {
                         return Ok(None);
                     }
@@ -217,7 +214,6 @@ impl Turtle {
                 }
 
                 let name = serde_json::from_str::<TurtleBlock>(&block)?.name;
-                let color = world::block_color(&name);
 
                 let action = match db_block {
                     Some(db_block) if db_block.id != 0 => {
@@ -226,29 +222,39 @@ impl Turtle {
                             return Ok(None);
                         }
 
-                        let pallete_id = palette.get_pallete_index(&name);
+                        let (pallete_id, new_id) = palette.get_pallete_index(&name);
                         db_block.id = pallete_id.try_into()?;
 
+                        let palette_enum = if new_id {
+                            WorldChangePaletteEnum::Insert { i: pallete_id, name }
+                        } else {
+                            WorldChangePaletteEnum::GetOld { i: pallete_id }
+                        };
+
                         WorldChangeAction::Update(WorldChangeUpdateBlock {
-                            color,
+                            palette: palette_enum,
                         })
 
-                        }
+                    }
                     _ => {
-                        let pallete_id: u16 = palette.get_pallete_index(&name).try_into()?;
+                        let (palette_id, new_id) = palette.get_pallete_index(&name);
 
                         //TODO: Get chunks and set new voxel
                         let chunk = chunks.force_get_mut_chunk_by_loc(&loc);
                         chunk.update_voxel_by_global_xyz(x, y, z, |voxel| {
-                            voxel.id = pallete_id;
+                            voxel.id = palette_id.try_into()?;
                             Ok(())
                         })?;
 
-                        let color = world::block_to_rgb(&block);
+
+                        let palette_enum = if new_id {
+                            WorldChangePaletteEnum::Insert { i: palette_id, name }
+                        } else {
+                            WorldChangePaletteEnum::GetOld { i: palette_id }
+                        };
+
                         WorldChangeAction::New(WorldChangeNewBlock {
-                            r: color.0,
-                            g: color.1,
-                            b: color.2,
+                            palette: palette_enum,
                         })
                     }
                 };

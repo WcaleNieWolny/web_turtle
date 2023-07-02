@@ -14,12 +14,11 @@ pub struct TurtleVoxel {
     pub id: u16
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Hash)]
+#[derive(Clone, Eq, PartialEq, Debug, Hash, Ord, PartialOrd)]
 pub struct ChunkLocation {
     pub x: i32,
     pub y: i8,
     pub z: i32,
-
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -52,6 +51,13 @@ impl ChunkLocation {
             y,
             z
         }
+    }
+
+    pub fn from_global_xyz(x: i32, y: i32, z: i32) -> Self {
+        let chunk_y: i8 = (y >> 4).try_into().expect("Y to big or to small");
+        let (chunk_x, chunk_z) = (x >> 4, z >> 4);
+
+        Self::xyz(chunk_x, chunk_y, chunk_z)
     }
 
     ///Padding is left to individual functions
@@ -338,16 +344,27 @@ impl TurtleWorldPalette {
     }
 
     #[must_use]
-    pub fn get_pallete_index(&mut self, item: &str) -> usize {
+    pub fn get_pallete_index(&mut self, item: &str) -> (usize, bool) {
         match self.palette_hashmap.get(item) {
-            Some(id) => *id,
+            Some(id) => (*id, false),
             None => {
+                let id = self.palette.len();
                 self.palette.push(into_byte_string(item.into()));
-                let id = self.palette.len() - 1;
                 self.palette_hashmap.insert(item.into(), id);
-                id
+                (id, true)
             },
         }
+    }
+
+
+    pub fn insert(&mut self, id: usize, name: String) {
+        if self.palette.len() != id || self.palette_hashmap.len() != id {
+            panic!("Invalid pallete insert! (Len: ({}, {}) but requested id: {})", self.palette.len(), self.palette_hashmap.len(), id);
+        }
+
+        let new_id = self.palette.len();
+        self.palette.push(into_byte_string(name.clone()));
+        self.palette_hashmap.insert(name, new_id);
     }
 
     pub fn iter(&self) -> std::slice::Iter<'_, ByteString> {
