@@ -38,6 +38,9 @@ static TURTLE_ASSET_LOCATION: &str = "/assets/turtle_model.glb#Scene0";
 #[cfg(not(target_arch = "wasm32"))]
 static TURTLE_ASSET_LOCATION: &str = "turtle_model.glb#Scene0";
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+
 #[derive(Reflect, Clone, Component)]
 pub struct BlockRaycastSet;
 
@@ -83,6 +86,7 @@ where
     TOKIO_RUNTIME.spawn(future);
 }
 
+#[wasm_bindgen(start)]
 fn main() {
     // When building for WASM, print panics to the browser console
 
@@ -122,6 +126,7 @@ impl Plugin for PlatformIndependentPlugins {
 }
 
 async fn async_main() {
+    log::warn!("WELCOME TO MAIN");
     App::new()
         .add_plugins(DefaultPlugins.build().set(WindowPlugin {
             primary_window: Some(Window {
