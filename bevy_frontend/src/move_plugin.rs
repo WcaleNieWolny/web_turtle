@@ -2,7 +2,7 @@ use std::{error::Error, time::Duration};
 
 use bevy::prelude::*;
 use bevy_panorbit_camera::PanOrbitCamera;
-use futures::channel::mpsc::{self, Receiver, Sender};
+use crossbeam_channel::{Receiver, Sender, bounded};
 use shared::{JsonTurtle, JsonTurtleDirection, TurtleMoveResponse};
 use uuid::Uuid;
 
@@ -23,7 +23,7 @@ struct MovePlugineGate {
 
 impl Plugin for MovePlugin {
     fn build(&self, app: &mut App) {
-        let (move_tx, move_rx) = mpsc::channel(8);
+        let (move_tx, move_rx) = bounded(8);
         app.insert_resource(MovePlugineGate {
             allow_move: true,
             handle_request: false,

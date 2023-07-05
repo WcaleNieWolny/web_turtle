@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use futures::channel::mpsc::{self, Receiver, Sender};
+use crossbeam_channel::{bounded, Receiver, Sender};
 use wasm_bindgen::{prelude::Closure, JsCast};
 use web_sys::UiEvent;
 
@@ -13,7 +13,7 @@ struct ResizeComponent {
 }
 
 fn init_resize_system(mut commands: Commands) {
-    let (resize_tx, resize_rx) = mpsc::channel::<(f32, f32)>(8);
+    let (resize_tx, resize_rx) = bounded::<(f32, f32)>(8);
     let component = ResizeComponent { rx: resize_rx };
 
     //Do not care about unsafe :)

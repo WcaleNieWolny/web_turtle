@@ -2,36 +2,59 @@
 name = "bevy_frontend"
 edition = "2021"
 version = "0.1.0"
+default-run = "bevy_frontend_bin"
 
 [dependencies]
-bevy_egui = "0.20.3"
+bevy_egui = { version = "0.20.3", default-features = false }
 bevy_mod_raycast = "0.8.0"
 bevy_panorbit_camera = "0.4.1"
 block-mesh = "0.2.0"
-console_error_panic_hook = "0.1"
-console_log = "1.0.0"
 log = "0.4"
-serde-wasm-bindgen = "0.4"
-wasm-bindgen-futures = "0.4"
 uuid = { version = "1", features = ["v4"] }
-egui_extras = { version = "0.21", features = ["svg"] }
+egui_extras = { version = "0.21", features = ["svg"], default-features = false }
 seahash = "4.1.0"
 bytes = "1"
+bevy = { version = "0.10.1", default-features = false }
+crossbeam-channel = "0.5"
 
-[dependencies.bevy]
-version = "0.10.1"
-default-features = false
-features = ["animation", "bevy_core_pipeline", "bevy_scene", "bevy_render", "bevy_winit", "bevy_pbr", "bevy_gltf", "bevy_asset"]
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+gloo-net = { version =  "0.2.6", features = ["http", "json"], default-features = false }
+wasm-bindgen = { version = "0.2", features = ["serde_json", "std", "serde", "spans"], default-features = false }
+wasm-bindgen-futures = { version = "0.4" }
+web-sys = { version = "0.3.6", features = ["Document", "Element", "HtmlElement", "Node", "Window", "Request", "RequestInit", "RequestMode", "Response", "UiEvent", "PointerEvent"], default-features = false }
+bevy = { version = "0.10.1", default-features = false, features = ["animation", "bevy_core_pipeline", "bevy_scene", "bevy_render", "bevy_winit", "bevy_pbr", "bevy_gltf", "bevy_asset"] }
+console_error_panic_hook = "0.1"
+console_log = "1.0.0"
+serde-wasm-bindgen = "0.4"
 
-[dependencies.futures]
-version = "0.3"
-default-features = false
-features = ["std"]
-
-[dependencies.gloo-net]
-version = "0.2.6"
-default-features = false
-features = ["http", "json"]
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1", features = ["full"] }
+once_cell = "1"
+reqwest = { version = "0.11", features = ["json"] }
+bevy = { version = "0.10.0", default-features=false, features = [
+  "animation",
+  "bevy_asset",
+  "bevy_audio",
+  "bevy_gilrs",
+  "bevy_scene",
+  "bevy_winit",
+  "bevy_core_pipeline",
+  "bevy_pbr",
+  "bevy_gltf",
+  "bevy_render",
+  "bevy_sprite",
+  "bevy_text",
+  "bevy_ui",
+  "png",
+  "hdr",
+  "ktx2",
+  "zstd",
+  "vorbis",
+  "x11",
+  "filesystem_watcher",
+  "android_shared_stdcxx",
+  "tonemapping_luts",
+]}
 
 [dependencies.serde]
 version = "1"
@@ -42,15 +65,13 @@ features = ["derive"]
 path = "../shared/"
 features = []
 
-[dependencies.wasm-bindgen]
-version = "0.2"
-features = ["serde_json", "std", "serde", "spans"]
-default-features = false
-
-[dependencies.web-sys]
-version = "0.3.6"
-features = ["Document", "Element", "HtmlElement", "Node", "Window", "Request", "RequestInit", "RequestMode", "Response", "UiEvent", "PointerEvent"]
-default-features = false
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
 
 [lib]
-crate-type = ["cdylib"]
+name = "bevy_frontend"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "bevy_frontend_bin"
+path = "src/main.rs"

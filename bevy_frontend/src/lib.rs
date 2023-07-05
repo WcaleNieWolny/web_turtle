@@ -24,9 +24,9 @@ use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraPlugin};
 use chunk_material::ChunkMaterialPlugin;
 use egui_ui_plugin::UiPlugin;
 //use block_destroy_plugin::BlockDestroyPlugin;
-use futures::Future;
 use move_plugin::MovePlugin;
 use shared::{JsonTurtle, WorldChange};
+use std::future::Future;
 #[cfg(not(target_arch = "wasm32"))]
 use tokio::runtime::{Builder, Runtime};
 use world_plugin::WorldPlugin;
@@ -86,8 +86,8 @@ where
     TOKIO_RUNTIME.spawn(future);
 }
 
-#[wasm_bindgen(start)]
-fn main() {
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
+pub fn start_app() {
     // When building for WASM, print panics to the browser console
 
     #[cfg(target_arch = "wasm32")]

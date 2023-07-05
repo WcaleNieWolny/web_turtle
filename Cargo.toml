@@ -1,5 +1,5 @@
 [workspace]
-members = ["bevy_frontend", "shared"]
+members = ["bevy_frontend", "backend", "shared"]
 resolver = "2"
 
 # Enable a small amount of optimization in debug mode

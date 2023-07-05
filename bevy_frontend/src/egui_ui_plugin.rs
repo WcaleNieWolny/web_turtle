@@ -11,10 +11,9 @@ use bevy_egui::{
     },
     EguiContexts,
 };
+use crossbeam_channel::{Sender, Receiver, bounded};
 use egui_extras::RetainedImage;
-use futures::channel::mpsc::{channel, Receiver, Sender};
 use shared::JsonTurtle;
-use uuid::Uuid;
 
 use crate::{spawn_async, MainTurtle, SelectTurtleEvent};
 
@@ -36,7 +35,7 @@ struct UiGate {
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        let (tx, rx) = channel(8);
+        let (tx, rx) = bounded(8);
 
         app.insert_resource(MainTurtle(Arc::new(RwLock::new(None))))
             .insert_resource(RefreshButtonImg(

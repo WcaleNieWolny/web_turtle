@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy_mod_raycast::{DefaultRaycastingPlugin, RaycastMethod, RaycastSource, RaycastSystem};
-use futures::channel::mpsc::{channel, Receiver, Sender};
+use crossbeam_channel::{Sender, Receiver, bounded};
 use shared::{DestroyBlockResponse, JsonTurtleDirection};
 use std::error::Error;
 use uuid::Uuid;
@@ -181,7 +181,7 @@ fn detect_block_destroy_response(
 
 impl Plugin for BlockDestroyPlugin {
     fn build(&self, app: &mut App) {
-        let (tx, rx) = channel::<DestroyBlockResponse>(8);
+        let (tx, rx) = bounded::<DestroyBlockResponse>(8);
         app.add_plugin(DefaultRaycastingPlugin::<BlockRaycastSet>::default())
             .insert_resource(BlockDestroyGate {
                 destroy_sender: tx,

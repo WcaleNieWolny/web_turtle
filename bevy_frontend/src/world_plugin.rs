@@ -8,8 +8,8 @@ use block_mesh::{
     greedy_quads, GreedyQuadsBuffer, MergeVoxel, Voxel, VoxelVisibility, RIGHT_HANDED_Y_UP_CONFIG,
 };
 use bytes::Bytes;
-use futures::channel::mpsc::{
-    channel, unbounded, Receiver, Sender, UnboundedReceiver, UnboundedSender,
+use crossbeam_channel::{
+    unbounded, bounded, Receiver, Sender,
 };
 use shared::{WorldChangePaletteEnum, WorldChange};
 use shared::world_structure::{ChunkLocation, TurtleVoxel, TurtleWorld, TurtleWorldPalette, TurtleWorldData};
@@ -32,8 +32,8 @@ struct WorldChunk {
 struct GlobalWorldGate {
     get_all_blocks_rx: Receiver<Option<TurtleWorld>>,
     get_all_blocks_tx: Sender<Option<TurtleWorld>>,
-    chunk_load_rx: UnboundedReceiver<ChunkLocation>,
-    chunk_load_tx: UnboundedSender<ChunkLocation>,
+    chunk_load_rx: Receiver<ChunkLocation>,
+    chunk_load_tx: Sender<ChunkLocation>,
 }
 
 #[derive(Resource, Deref)]
@@ -74,7 +74,7 @@ type ChunkShape = ConstShape3u32<18, 18, 18>;
 
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
-        let (tx, rx) = channel::<Option<TurtleWorld>>(8);
+        let (tx, rx) = bounded::<Option<TurtleWorld>>(8);
         let (chunk_tx, chunk_rx) = unbounded::<ChunkLocation>();
 
         app.insert_resource(GlobalWorldGate {
@@ -109,15 +109,7 @@ fn load_chunk_from_queue(
     //We will only ever load CHUNKS_PER_FRAME_CAP chunks per 1 frame
     let mut i = 0usize;
 
-    while let Ok(chunk_loc) = global_world_gate.chunk_load_rx.try_next() {
-        let chunk_loc = match chunk_loc {
-            Some(val) => val,
-            None => {
-                log::error!("Closed chunk_loc channel. THIS SHOULD NEVER HAPPEN!!!");
-                return;
-            }
-        };
-
+    while let Ok(chunk_loc) = global_world_gate.chunk_load_rx.try_recv() {
         let previous_mesh = world_chunks
             .iter()
             .find(|(_, loc)| loc.location == chunk_loc);
@@ -212,27 +204,21 @@ fn recive_all_new_world(
     mut global_world: ResMut<GlobalWorld>,
     //mut material_singletone: ResMut<ChunkMaterialSingleton>
 ) {
-    match global_world_gate.get_all_blocks_rx.try_next() {
+    match global_world_gate.get_all_blocks_rx.try_recv() {
         Ok(val) => {
             match val {
                 Some(world) => {
-                    match world {
-                        Some(mut world) => {
-                            let (_, world_data) = world.get_fields_mut();
-                            let res = world_data.iter().map(|(loc, _)| loc).try_for_each(|loc| {
-                                global_world_gate.chunk_load_tx.unbounded_send(loc.clone())
-                            });
+                    let (_, world_data) = world.get_fields_mut();
+                    let res = world_data.iter().map(|(loc, _)| loc).try_for_each(|loc| {
+                        global_world_gate.chunk_load_tx.send(loc.clone())
+                    });
 
-                            if let Err(err) = res {
-                                log::error!("Cannot send turtle chunks loc into further processing. Err: {err}");
-                                return;
-                            }
-
-                            global_world.world = Some(world);
-                            //material_singletone.set_changed();
-                        }
-                        None => return, //Something went wrong
+                    if let Err(err) = res {
+                        log::error!("Cannot send turtle chunks loc into further processing. Err: {err}");
+                        return;
                     }
+
+                    global_world.world = Some(world);
                 }
                 None => {
                     panic!("The global world channel closed! This SHOULD NEVER HAPPEN!");
@@ -384,6 +370,6 @@ fn block_change_detect(
     log::warn!("AFT TO REM: {:?}", chunks_to_rerender);
 
     for location in chunks_to_rerender {
-        global_world_gate.chunk_load_tx.unbounded_send(location).expect("Cannot send chunk to rerender");
+        global_world_gate.chunk_load_tx.send(location).expect("Cannot send chunk to rerender");
     }
 }

@@ -6,8 +6,11 @@ frontend:
 	#
 	#
 
-RUSTC=$(shell rustup which --toolchain nightly rustc)
-CARGO=$(shell rustup which --toolchain nightly cargo)
+DIST_PATH=$(shell realpath ./dist/)
+FINAL_BIN_PATH=$(shell realpath ./dist/bevy_frontend_bg.wasm)
 
 wasm-pack:
-	rustup run nightly wasm-pack build --target web -d $(realpath ./dist/) . -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort 
+	rustup run nightly wasm-pack build --target web -d $(DIST_PATH) . -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort
+	# wasm-snip $(FINAL_BIN_PATH) --snip-rust-panicking-code  -o $(FINAL_BIN_PATH)
+	wasm-opt -O4 -ol 100 --dce -s 100 -o $(FINAL_BIN_PATH) $(FINAL_BIN_PATH)
+	cp -f ./index.html	$(DIST_PATH)

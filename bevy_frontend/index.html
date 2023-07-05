@@ -4,16 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TurtleWeb Bevy Frontend</title>
-	<link data-trunk rel="css" href="main.css"/>
-	<link data-trunk rel="copy-dir" href="./assets/" data-target-path="./assets/"/>
   </head>
   <body style="margin: 0;">
-    <link data-trunk rel="rust" href="Cargo.toml" data-wasm-opt="4"/>
-	<!-- <link data-trunk rel="copy-dir" href="assets"/> -->
 	<div id="app" class="main">
 	  <div class="game_div">
 		  <canvas class="game_canvas"></canvas>
 	  </div>
 	</div>
+	<script type="module">
+		import init, * as with_bindings from './bevy_frontend.js';
+
+		async function run() {
+			await init();
+		}
+
+		run();
+	</script>
   </body>
 </html>
