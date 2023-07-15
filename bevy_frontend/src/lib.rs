@@ -8,11 +8,6 @@ mod world_plugin;
 #[cfg(target_arch = "wasm32")]
 mod resize_plugin;
 
-//mod inventory_plugin;
-
-#[cfg(target_arch = "wasm32")]
-extern crate console_error_panic_hook;
-
 use std::panic;
 use std::sync::RwLock;
 use std::{f32::consts::TAU, sync::Arc};
@@ -90,8 +85,12 @@ where
 pub fn start_app() {
     // When building for WASM, print panics to the browser console
 
-    #[cfg(target_arch = "wasm32")]
+
+
+    #[cfg(all(target_arch = "wasm32", panic = "unwind"))]
     {
+        extern crate console_error_panic_hook;
+
         use log::Level;
         panic::set_hook(Box::new(console_error_panic_hook::hook));
         console_log::init_with_level(Level::Warn).unwrap();

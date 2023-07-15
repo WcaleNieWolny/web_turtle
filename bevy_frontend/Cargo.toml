@@ -6,7 +6,7 @@ default-run = "bevy_frontend_bin"
 
 [dependencies]
 bevy_egui = { version = "0.20.3", default-features = false }
-bevy_mod_raycast = "0.8.0"
+bevy_mod_raycast = { version =  "0.8.0", default-features = false }
 bevy_panorbit_camera = "0.4.1"
 block-mesh = "0.2.0"
 log = "0.4"
@@ -14,7 +14,7 @@ uuid = { version = "1", features = ["v4"] }
 egui_extras = { version = "0.21", features = ["svg"], default-features = false }
 seahash = "4.1.0"
 bytes = "1"
-bevy = { version = "0.10.1", default-features = false }
+bevy = { version = "0.10.1", default-features = false, optional = true }
 crossbeam-channel = "0.5"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -23,9 +23,11 @@ wasm-bindgen = { version = "0.2", features = ["serde_json", "std", "serde", "spa
 wasm-bindgen-futures = { version = "0.4" }
 web-sys = { version = "0.3.6", features = ["Document", "Element", "HtmlElement", "Node", "Window", "Request", "RequestInit", "RequestMode", "Response", "UiEvent", "PointerEvent"], default-features = false }
 bevy = { version = "0.10.1", default-features = false, features = ["animation", "bevy_core_pipeline", "bevy_scene", "bevy_render", "bevy_winit", "bevy_pbr", "bevy_gltf", "bevy_asset"] }
+serde-wasm-bindgen = "0.4"
+
+[target.'cfg(all(target_arch = "wasm32", panic = "unwind"))'.dependencies]
 console_error_panic_hook = "0.1"
 console_log = "1.0.0"
-serde-wasm-bindgen = "0.4"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1", features = ["full"] }

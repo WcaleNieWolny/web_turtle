@@ -200,14 +200,14 @@ fn load_chunk_from_queue(
 }
 
 fn recive_all_new_world(
-    mut global_world_gate: ResMut<GlobalWorldGate>,
+    global_world_gate: ResMut<GlobalWorldGate>,
     mut global_world: ResMut<GlobalWorld>,
     //mut material_singletone: ResMut<ChunkMaterialSingleton>
 ) {
     match global_world_gate.get_all_blocks_rx.try_recv() {
         Ok(val) => {
             match val {
-                Some(world) => {
+                Some(mut world) => {
                     let (_, world_data) = world.get_fields_mut();
                     let res = world_data.iter().map(|(loc, _)| loc).try_for_each(|loc| {
                         global_world_gate.chunk_load_tx.send(loc.clone())

@@ -229,8 +229,7 @@ fn turtle_button(ui: &mut Ui, i: usize, is_main_turtle: bool) -> bool {
 }
 
 fn recive_turtle_list(mut gate: ResMut<UiGate>) {
-    while let Ok(response) = gate.fetching_rx.try_next() {
-        let response = response.expect("Fetch UI channel closed");
+    while let Ok(response) = gate.fetching_rx.recv() {
 
         gate.fetching.store(false, Ordering::Relaxed);
         match response {

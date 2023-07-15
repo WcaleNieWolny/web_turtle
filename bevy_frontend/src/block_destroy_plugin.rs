@@ -170,9 +170,7 @@ fn detect_block_destroy_response(
     mut world_change_writer: EventWriter<WorldChangeEvent>,
     mut gate: ResMut<BlockDestroyGate>,
 ) {
-    if let Ok(response) = gate.destroy_reciver.try_next() {
-        let response = response.expect("DestroyBlockResponse channel SHOULD never be closed!");
-
+    if let Ok(response) = gate.destroy_reciver.recv() {
         if let Some(change) = response.change {
             world_change_writer.send(WorldChangeEvent(change))
         }

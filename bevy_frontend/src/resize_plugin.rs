@@ -60,14 +60,9 @@ fn check_window_size(
 ) {
     let mut component = resize_component.single_mut();
 
-    while let Ok(val) = component.rx.try_next() {
-        match val {
-            Some((width, height)) => {
-                let mut window = windows.single_mut();
-                window.resolution.set(width, height)
-            }
-            None => unreachable!(), //This channel will never be closed
-        }
+    while let Ok((width, height)) = component.rx.recv() {
+        let mut window = windows.single_mut();
+        window.resolution.set(width, height)
     }
 }
 
